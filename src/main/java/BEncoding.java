@@ -2,9 +2,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 public class BEncoding {
 
@@ -26,15 +24,15 @@ public class BEncoding {
 
     public static Object Decode(List<Byte> bytes) {
         Iterator<Byte> iter = bytes.iterator();
-        return DecodeNext(iter);
+        byte current = iter.next();
+        return DecodeNext(current, iter);
     }
 
-    private static Object DecodeNext(Iterator<Byte> iter) {
-        byte b = iter.next();
-        if (b == DICT_START) return DecodeDict(iter);
-        if (b == LIST_START) return DecodeList(iter);
-        if (b == NUM_START) return DecodeNum(iter);
-        return DecodeByteArray(b, iter);
+    private static Object DecodeNext(byte current, Iterator<Byte> iter) {
+        if (current == DICT_START) return DecodeDict(iter);
+        if (current == LIST_START) return DecodeList(iter);
+        if (current == NUM_START) return DecodeNum(iter);
+        return DecodeByteArray(current, iter);
     }
 
     private static long DecodeNum(Iterator<Byte> iter) {
@@ -82,5 +80,39 @@ public class BEncoding {
             bytes[i] = iter.next();
         }
         return bytes;
+    }
+
+    private static List<Object> DecodeList(Iterator<Byte> iter) {
+        List<Object> list = new ArrayList<>();
+
+        while (iter.hasNext()) {
+            byte current = iter.next();
+            if (current == END) break;
+            list.add(DecodeNext(current, iter));
+        }
+
+        return list;
+    }
+
+    private static HashMap<String, Object> DecodeDict(Iterator<Byte> iter) {
+        HashMap<String, Object> dict = new HashMap<>();
+        List<String> keys = new ArrayList<>();
+
+        while (iter.hasNext()) {
+            byte current = iter.next();
+            if (current == END) break;
+
+            String key = new String(DecodeByteArray(current, iter), StandardCharsets.UTF_8);
+            current = iter.next();
+            Object val = DecodeNext(current, iter);
+
+            keys.add(key);
+            dict.put(key, val);
+        }
+
+        // TODO Verify dict is sorted correctly
+        // Important to ensure we are able to encode correctly
+
+        return dict;
     }
 }
