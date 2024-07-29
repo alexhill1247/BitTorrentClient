@@ -1,7 +1,8 @@
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.nio.file.Path;
 import java.util.*;
 
 public class BEncoding {
@@ -12,9 +13,13 @@ public class BEncoding {
     private static final byte END = "e".getBytes(StandardCharsets.UTF_8)[0];
     private static final byte DIVIDER = ":".getBytes(StandardCharsets.UTF_8)[0];
 
-    // Read file into byte array then convert to List for iterator
+
+    //--------------------DECODING---------------------
+
+
+    // Read file into byte array then convert to list for iterator
     public static Object DecodeFile(String path) throws IOException {
-        byte[] bytes = Files.readAllBytes(Paths.get(path));
+        byte[] bytes = Files.readAllBytes(Path.of(path));
         List<Byte> byteList = new ArrayList<>();
         for (byte b : bytes) {
             byteList.add(b);
@@ -28,6 +33,7 @@ public class BEncoding {
         return DecodeNext(current, iter);
     }
 
+    // Identify next object to decode and call relevant method
     private static Object DecodeNext(byte current, Iterator<Byte> iter) {
         if (current == DICT_START) return DecodeDict(iter);
         if (current == LIST_START) return DecodeList(iter);
@@ -94,9 +100,11 @@ public class BEncoding {
         return list;
     }
 
-    private static HashMap<String, Object> DecodeDict(Iterator<Byte> iter) {
-        HashMap<String, Object> dict = new HashMap<>();
-        List<String> keys = new ArrayList<>();
+    // Uses TreeMap with custom comparator to sort by byte representation of keys
+    private static TreeMap<String, Object> DecodeDict(Iterator<Byte> iter) {
+        TreeMap<String, Object> dict = new TreeMap<>(
+                Comparator.comparing(key -> Arrays.toString(key.getBytes(StandardCharsets.UTF_8)))
+        );
 
         while (iter.hasNext()) {
             byte current = iter.next();
@@ -106,13 +114,69 @@ public class BEncoding {
             current = iter.next();
             Object val = DecodeNext(current, iter);
 
-            keys.add(key);
             dict.put(key, val);
         }
 
-        // TODO Verify dict is sorted correctly
-        // Important to ensure we are able to encode correctly
-
         return dict;
+    }
+
+
+    //----------------------ENCODING------------------------
+
+
+    public static void EncodeFile(Object obj, String path) throws Exception {
+        Files.write(Path.of(path), Encode(obj));
+    }
+
+    public static byte[] Encode(Object obj) throws Exception {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        EncodeNext(buffer, obj);
+        return buffer.toByteArray();
+    }
+
+    private static void EncodeNext(ByteArrayOutputStream buffer, Object obj) throws Exception {
+        if (obj instanceof byte[]) EncodeByteArray(buffer, (byte[])obj);
+        else if (obj instanceof String) EncodeString(buffer, (String)obj);
+        else if (obj instanceof Long) EncodeNum(buffer, (Long)obj);
+        else if (obj instanceof List<?>) EncodeList(buffer, (List<Object>)obj);
+        else if (obj instanceof HashMap<?,?>) EncodeDict(buffer, (HashMap<String, Object>)obj);
+        else throw new Exception("Unable to encode type " + obj.getClass());
+
+    }
+
+    private static void EncodeNum(ByteArrayOutputStream buffer, long num) throws IOException {
+        buffer.write(NUM_START);
+        buffer.write(Long.toString(num).getBytes(StandardCharsets.UTF_8));
+        buffer.write(END);
+    }
+
+    private static void EncodeByteArray(ByteArrayOutputStream buffer, byte[] bytes) throws IOException {
+        buffer.write(new String(bytes, StandardCharsets.UTF_8).length());
+        buffer.write(DIVIDER);
+        buffer.write(bytes);
+    }
+
+    private static void EncodeString(ByteArrayOutputStream buffer, String str) throws IOException {
+        EncodeByteArray(buffer, str.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void EncodeList(ByteArrayOutputStream buffer, List<Object> list) throws Exception {
+        buffer.write(LIST_START);
+        for (Object item : list) EncodeNext(buffer, item);
+        buffer.write(END);
+    }
+
+    private static void EncodeDict(ByteArrayOutputStream buffer, Map<String, Object> dict) throws Exception {
+        TreeMap<String, Object> sortedDict = new TreeMap<>(
+                Comparator.comparing(key -> Arrays.toString(key.getBytes(StandardCharsets.UTF_8)))
+        );
+        sortedDict.putAll(dict);
+
+        buffer.write(DICT_START);
+        for (String key : sortedDict.keySet()) {
+            EncodeString(buffer, key);
+            EncodeNext(buffer, sortedDict.get(key));
+        }
+        buffer.write(END);
     }
 }
