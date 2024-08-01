@@ -180,3 +180,5 @@ public class BEncoding {
         buffer.write(END);
     }
 }
+
+//TODO fix access modifiers
