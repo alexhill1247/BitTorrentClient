@@ -98,16 +98,65 @@ public class Torrent {
     //TODO peerlist event handler
 
     private ReentrantLock[] fileWriteLocks;
-    private static MessageDigest md;
+    private static MessageDigest sha1;
     static {
         try {
-            md = MessageDigest.getInstance("SHA-1");
+            sha1 = MessageDigest.getInstance("SHA-1");
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
     }
 
-    //TODO constructor
+    public Torrent(String name, String downloadDirectory, List<FileItem> files, List<String> trackers,
+                   int pieceSize, byte[] pieceHashes, int blockSize, boolean isPrivate)
+    {
+        this.name = name;
+        this.downloadDirectory = downloadDirectory;
+        this.files = files;
+        fileWriteLocks = new ReentrantLock[files.size()];
+        if (trackers != null) {
+            for (String url : trackers) {
+                Tracker tracker = new Tracker(url);
+                this.trackers.add(tracker);
+                //TODO trigger peer list event
+            }
+        }
+        this.pieceSize = pieceSize;
+        this.blockSize = blockSize;
+        this.isPrivate = isPrivate;
+
+        int count = (int) Math.ceil((double) getTotalSize() / (double) pieceSize);
+
+        this.pieceHashes = new byte[count][];
+        isPieceVerified = new boolean[count];
+        isBlockAcquired = new boolean[count][];
+
+        for (int i = 0; i < getPieceCount(); i++) {
+            isBlockAcquired[i] = new boolean[getBlockCount(i)];
+        }
+
+        if (pieceHashes == null) {
+            // New torrent
+            for (int i = 0; i < getPieceCount(); i++) {
+                this.pieceHashes[i] = GetHash(i);
+            }
+        } else {
+            for (int i = 0; i < getPieceCount(); i++) {
+                this.pieceHashes[i] = new byte[20];
+                System.arraycopy(pieceHashes, i * 20, this.pieceHashes[i], 0, 20);
+            }
+        }
+
+        Object info = TorrentInfoToBEncodingObj(this);
+        byte[] bytes = BEncoding.Encode(info);
+        infoHash = sha1.digest(bytes);
+
+        for (int i = 0; i < getPieceCount(); i++) {
+            Verify(i);
+        }
+    }
 }
 
-//TODO fix access modifiers
+//TODO fix access modifiers, getters, setters
+//TODO add torrent constructor overloading to support default
+// values
