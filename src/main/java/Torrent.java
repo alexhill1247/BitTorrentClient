@@ -5,7 +5,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
@@ -148,13 +147,20 @@ public class Torrent {
         }
 
         Object info = TorrentInfoToBEncodingObj(this);
-        byte[] bytes = BEncoding.Encode(info);
+        byte[] bytes;
+        try {
+            bytes = BEncoding.encode(info);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         infoHash = sha1.digest(bytes);
 
         for (int i = 0; i < getPieceCount(); i++) {
             Verify(i);
         }
     }
+
+    public byte[] read
 }
 
 //TODO fix access modifiers, getters, setters
