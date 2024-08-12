@@ -1,7 +1,12 @@
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -96,7 +101,7 @@ public class Torrent {
 
     //TODO peerlist event handler
 
-    private ReentrantLock[] fileWriteLocks;
+    private Object[] fileWriteLocks;
     private static MessageDigest sha1;
     static {
         try {
@@ -112,7 +117,11 @@ public class Torrent {
         this.name = name;
         this.downloadDirectory = downloadDirectory;
         this.files = files;
-        fileWriteLocks = new ReentrantLock[files.size()];
+        fileWriteLocks = new Object[this.files.size()];
+        for (int i = 0; i < this.files.size(); i++) {
+            fileWriteLocks[i] = new Object();
+        }
+
         if (trackers != null) {
             for (String url : trackers) {
                 Tracker tracker = new Tracker(url);
@@ -120,6 +129,7 @@ public class Torrent {
                 //TODO trigger peer list event
             }
         }
+
         this.pieceSize = pieceSize;
         this.blockSize = blockSize;
         this.isPrivate = isPrivate;
@@ -160,7 +170,72 @@ public class Torrent {
         }
     }
 
-    public byte[] read
+    public byte[] read(long start, int length) {
+        long end = start + length;
+        byte[] buffer = new byte[length];
+
+        for (int i = 0; i < files.size(); i++) {
+            if ((start < files.get(i).offset &&
+                   end < files.get(i).offset) ||
+                (start > files.get(i).offset + files.get(i).size &&
+                   end > files.get(i).offset + files.get(i).size))
+                continue;
+
+            String filePath = downloadDirectory + File.separatorChar + getFileDirectory() + files.get(i).path;
+
+            if (!Files.exists(Path.of(filePath))) return null;
+
+            long fileStart = Math.max(0, start - files.get(i).offset);
+            long fileEnd = Math.min(end - files.get(i).offset, files.get(i).size);
+            int fileLength = (int) (fileEnd - fileStart);
+            int blockStart = Math.max(0, (int) (files.get(i).offset - start));
+
+            try (RandomAccessFile file = new RandomAccessFile(filePath, "r")) {
+                file.seek(fileStart);
+                file.read(buffer, blockStart, fileLength);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return buffer;
+    }
+
+    public void write(long start, byte[] bytes) {
+        long end = start + bytes.length;
+
+        for (int i = 0; i < files.size(); i++) {
+            if ((start < files.get(i).offset &&
+                   end < files.get(i).offset) ||
+                (start > files.get(i).offset + files.get(i).size &&
+                   end > files.get(i).offset + files.get(i).size))
+                continue;
+
+            String filePath = downloadDirectory + File.separatorChar + getFileDirectory() + files.get(i).path;
+
+            Path dir = Path.of(filePath).getParent();
+            if (!Files.exists(dir)) {
+                try {
+                    Files.createDirectories(dir);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            synchronized (fileWriteLocks[i]) {
+                try (RandomAccessFile file = new RandomAccessFile(filePath, "rw")) {
+                    long fileStart = Math.max(0, start - files.get(i).offset);
+                    long fileEnd = Math.min(end - files.get(i).offset, files.get(i).size);
+                    int fileLength = (int) (fileEnd - fileStart);
+                    int blockStart = Math.max(0, (int) (files.get(i).offset - start));
+
+                    file.seek(fileStart);
+                    file.write(bytes, blockStart, fileLength);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
+    }
 }
 
 //TODO fix access modifiers, getters, setters
