@@ -1,5 +1,4 @@
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.URLEncoder;
@@ -10,9 +9,9 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -43,12 +42,11 @@ public class Torrent {
 
     public byte[][] pieceHashes;
     public int getPieceCount() { return pieceHashes.length; }
-    public boolean[] isPieceVerified;
-    public boolean[][] isBlockAcquired;
+    public Boolean[] isPieceVerified;
+    public Boolean[][] isBlockAcquired;
 
     public String getVerifiedPiecesStr() {
-        return IntStream.range(0, isPieceVerified.length)
-                .mapToObj(i -> isPieceVerified[i] ? "1" : "0")
+        return Arrays.stream(isPieceVerified).map(b -> b ? "1" : "0")
                 .collect(Collectors.joining());
     }
     public int getVerifiedPiecesCount() {
@@ -137,17 +135,17 @@ public class Torrent {
         int count = (int) Math.ceil((double) getTotalSize() / (double) pieceSize);
 
         this.pieceHashes = new byte[count][];
-        isPieceVerified = new boolean[count];
-        isBlockAcquired = new boolean[count][];
+        isPieceVerified = new Boolean[count];
+        isBlockAcquired = new Boolean[count][];
 
         for (int i = 0; i < getPieceCount(); i++) {
-            isBlockAcquired[i] = new boolean[getBlockCount(i)];
+            isBlockAcquired[i] = new Boolean[getBlockCount(i)];
         }
 
         if (pieceHashes == null) {
             // New torrent
             for (int i = 0; i < getPieceCount(); i++) {
-                this.pieceHashes[i] = GetHash(i);
+                this.pieceHashes[i] = getHash(i);
             }
         } else {
             for (int i = 0; i < getPieceCount(); i++) {
@@ -156,7 +154,7 @@ public class Torrent {
             }
         }
 
-        Object info = TorrentInfoToBEncodingObj(this);
+        Object info = torrentInfoToBEncodingObj(this);
         byte[] bytes;
         try {
             bytes = BEncoding.encode(info);
@@ -166,9 +164,13 @@ public class Torrent {
         infoHash = sha1.digest(bytes);
 
         for (int i = 0; i < getPieceCount(); i++) {
-            Verify(i);
+            verify(i);
         }
     }
+
+    //------------------------------------------------------
+    //                 READING / WRITING
+    //------------------------------------------------------
 
     public byte[] read(long start, int length) {
         long end = start + length;
@@ -236,8 +238,58 @@ public class Torrent {
             }
         }
     }
+
+    public byte[] readPiece(int piece) {
+        return read((long) piece * pieceSize, getPieceSize(piece));
+    }
+
+    public byte[] readBlock(int piece, int offset, int length) {
+        return read((long) piece * pieceSize + offset, length);
+    }
+
+    public void writeBlock(int piece, int block, byte[] bytes) {
+        write((long) piece * pieceSize + (long) block * blockSize, bytes);
+        isBlockAcquired[piece][block] = true;
+        verify(piece);
+    }
+
+    //-----------------------------------------------------
+    //                     VERIFYING
+    //-----------------------------------------------------
+
+    //TODO handle pieceVerified event
+
+    public void verify(int piece) {
+        byte[] hash = getHash(piece);
+
+        boolean isVerified = (hash != null && Arrays.equals(hash, pieceHashes[piece]));
+
+        if (isVerified) {
+            isPieceVerified[piece] = true;
+
+            Arrays.fill(isBlockAcquired[piece], true);
+
+            //TODO piece verified
+
+            return;
+        }
+
+        isPieceVerified[piece] = false;
+
+        if (Arrays.stream(isBlockAcquired[piece]).allMatch(x -> x)) {
+            Arrays.fill(isBlockAcquired[piece], false);
+        }
+    }
+
+    public byte[] getHash(int piece) {
+        byte[] data = readPiece(piece);
+
+        if (data == null) return null;
+        return sha1.digest(data);
+    }
 }
 
 //TODO fix access modifiers, getters, setters
 //TODO add torrent constructor overloading to support default
 // values
+//TODO event handling
