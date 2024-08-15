@@ -18,8 +18,13 @@ public class BEncoding {
 
 
     // Read file into byte array then convert to list for iterator
-    public static Object decodeFile(String path) throws IOException {
-        byte[] bytes = Files.readAllBytes(Path.of(path));
+    public static Object decodeFile(String path) {
+        byte[] bytes;
+        try {
+            bytes = Files.readAllBytes(Path.of(path));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         List<Byte> byteList = new ArrayList<>();
         for (byte b : bytes) {
             byteList.add(b);
@@ -124,8 +129,12 @@ public class BEncoding {
     //----------------------ENCODING------------------------
 
 
-    public static void encodeFile(Object obj, String path) throws Exception {
-        Files.write(Path.of(path), encode(obj));
+    public static void encodeFile(Object obj, String path) {
+        try {
+            Files.write(Path.of(path), encode(obj));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static byte[] encode(Object obj) throws Exception {

@@ -1,23 +1,22 @@
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
 import java.net.URLEncoder;
+import java.nio.Buffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.List;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class Torrent {
     public String name;
-    public boolean isPrivate;
+    public Boolean isPrivate;
     public List<FileItem> files = new ArrayList<>();
     public String getFileDirectory() { return (files.size() > 1 ? name + File.separatorChar : ""); }
     public String downloadDirectory;
@@ -25,7 +24,7 @@ public class Torrent {
     public List<Tracker> trackers = new ArrayList<>();
     public String comment;
     public String createdBy;
-    public Date creationDate;
+    public ZonedDateTime creationDate;
     public Charset encoding;
 
     public int blockSize;
@@ -276,6 +275,7 @@ public class Torrent {
 
         isPieceVerified[piece] = false;
 
+        // If verification fails reset each block
         if (Arrays.stream(isBlockAcquired[piece]).allMatch(x -> x)) {
             Arrays.fill(isBlockAcquired[piece], false);
         }
@@ -286,6 +286,192 @@ public class Torrent {
 
         if (data == null) return null;
         return sha1.digest(data);
+    }
+
+    //----------------------------------------------------
+    //             IMPORTING AND EXPORTING
+    //----------------------------------------------------
+
+    public static Torrent loadFromFile(String filePath, String downloadPath) {
+        Object obj = BEncoding.decodeFile(filePath);
+        Path path = Path.of(filePath);
+        String name = path.getFileName().toString();
+        int ext = name.lastIndexOf(".");
+        String nameWithoutExt = name.substring(0, ext);
+
+        return BEncodingObjToTorrent(obj, name, downloadPath);
+    }
+
+    public static void saveToFile(Torrent torrent) {
+        Object obj = torrentToBEncodingObj(torrent);
+
+        BEncoding.encodeFile(obj, torrent.name + ".torrent");
+    }
+
+    public static long zonedDateTimeToUnixTimestamp(ZonedDateTime time) {
+        return time.toEpochSecond();
+    }
+
+    private static Object torrentToBEncodingObj(Torrent torrent) {
+        HashMap<String, Object> dict = new HashMap<>();
+
+        if (torrent.trackers.size() == 1) {
+            dict.put("announce", torrent.trackers.get(0).address.getBytes(StandardCharsets.UTF_8));
+        } else {
+            dict.put("announce", torrent.trackers.stream().map(
+                    x -> x.address.getBytes(StandardCharsets.UTF_8))
+                    .toList());
+        }
+        dict.put("comment", torrent.comment.getBytes(StandardCharsets.UTF_8));
+        dict.put("created by", torrent.createdBy.getBytes(StandardCharsets.UTF_8));
+        dict.put("creation date", zonedDateTimeToUnixTimestamp(torrent.creationDate));
+        dict.put("encoding", "UTF-8".getBytes(StandardCharsets.UTF_8));
+        dict.put("info", torrentInfoToBEncodingObj(torrent));
+
+        return dict;
+    }
+
+    private static Object torrentInfoToBEncodingObj(Torrent torrent) {
+        HashMap<String, Object> dict = new HashMap<>();
+
+        dict.put("piece length", torrent.pieceSize);
+        byte[] pieces = new byte[20 * torrent.getPieceCount()];
+        for (int i = 0; i < torrent.getPieceCount(); i++) {
+            System.arraycopy(torrent.pieceHashes[i], 0, pieces, i * 20, 20);
+        }
+        dict.put("pieces", pieces);
+
+        if (torrent.isPrivate != null) {
+            dict.put("private", torrent.isPrivate ? 1L : 0L);
+        }
+
+        if (torrent.files.size() == 1) {
+            dict.put("name", torrent.files.get(0).path.getBytes(StandardCharsets.UTF_8));
+            dict.put("length", torrent.files.get(0).size);
+        } else {
+            List<Object> files = new ArrayList<>();
+            for (FileItem fileItem : torrent.files) {
+                HashMap<String, Object> fileDict = new HashMap<>();
+                // Store path as a list
+                fileDict.put("path", Arrays.stream(fileItem.path
+                        .split(String.valueOf(File.separatorChar)))
+                        .map(x -> x.getBytes(StandardCharsets.UTF_8))
+                        .toList()
+                );
+                fileDict.put("length", fileItem.size);
+                files.add(fileDict);
+            }
+
+            dict.put("files", files);
+            // Remove trailing file separator
+            dict.put("name", torrent.getFileDirectory()
+                    .substring(0, torrent.getFileDirectory().length() - 1)
+                    .getBytes(StandardCharsets.UTF_8)
+            );
+        }
+
+        return dict;
+    }
+
+    public static String decodeUTF8Str(Object obj) {
+        byte[] bytes;
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        try (ObjectOutputStream out = new ObjectOutputStream(bos)) {
+            out.writeObject(obj);
+            out.flush();
+            bytes = bos.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    public static ZonedDateTime unixTimestampToZonedDateTime(long unixTimestamp) {
+        Instant instant = Instant.ofEpochSecond(unixTimestamp);
+        return instant.atZone(ZoneId.systemDefault());
+    }
+
+    @SuppressWarnings("unchecked")
+    public static Torrent BEncodingObjToTorrent(Object bencoding, String name, String downloadPath) {
+        HashMap<String, Object> obj = (HashMap<String, Object>) bencoding;
+        if (obj == null) throw new RuntimeException("Not a torrent file");
+
+        List<String> trackers = new ArrayList<>();
+        if (obj.containsKey("announce")) trackers.add(decodeUTF8Str(obj.get("announce")));
+
+        if (!obj.containsKey("info")) throw new RuntimeException("Missing torrent info");
+        HashMap<String, Object> info = (HashMap<String, Object>) obj.get("info");
+        if (info == null) throw new RuntimeException("Error with torrent info");
+
+        List<FileItem> files = new ArrayList<>();
+        if (info.containsKey("name") && info.containsKey("length")) {
+            files.add(new FileItem(
+                    (String) info.get("name"),
+                    (long) info.get("length")
+            ));
+        } else if (info.containsKey("files")) {
+            long running = 0;
+
+            for (Object item : (List<Object>) info.get("files")) {
+                HashMap<String, Object> dict = (HashMap<String, Object>) item;
+
+                if (dict == null || !dict.containsKey("path") || !dict.containsKey("length"))
+                    throw new RuntimeException("Incorrect file specification");
+
+                List<Object> pathList = (List<Object>) dict.get("path");
+
+                String path = String.join(File.separator, pathList
+                        .stream()
+                        .map(x -> decodeUTF8Str(x))
+                        .collect(Collectors.joining())
+                );
+                //TODO check output ^^^
+
+                long size = (long) dict.get("length");
+
+                files.add(new FileItem(path, size, running));
+
+                running += size;
+            }
+        } else {
+            throw new RuntimeException("No files in torrent");
+        }
+
+        if (!info.containsKey("piece length")) throw new RuntimeException("Error with piece length");
+        int pieceSize = (int) info.get("piece length");
+
+        if (!info.containsKey("pieces")) throw new RuntimeException("Error with pieces");
+        byte[] pieceHashes = (byte[]) info.get("pieces");
+
+        Boolean isPrivate = null;
+        if (info.containsKey("private"))
+            isPrivate = (long) info.get("private") == 1L;
+
+        Torrent torrent = new Torrent(
+                name,
+                downloadPath,
+                files,
+                trackers,
+                pieceSize,
+                pieceHashes,
+                16384,
+                isPrivate
+        );
+
+        if (obj.containsKey("comment"))
+            torrent.comment = decodeUTF8Str(obj.get("comment"));
+
+        if (obj.containsKey("created by"))
+            torrent.createdBy = decodeUTF8Str(obj.get("created by"));
+
+        if (obj.containsKey("creation date"))
+            torrent.creationDate = unixTimestampToZonedDateTime((long) obj.get("creation date"));
+
+        //TODO check output vvv
+        if (obj.containsKey("encoding"))
+            torrent.encoding = Charset.forName(decodeUTF8Str(obj.get("encoding")));
+
+        return torrent;
     }
 }
 
