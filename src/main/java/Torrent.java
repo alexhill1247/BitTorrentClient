@@ -473,6 +473,13 @@ public class Torrent {
 
         return torrent;
     }
+
+    //----------------------------------------------------
+    //                      CREATION
+    //----------------------------------------------------
+
+    //TODO torrent creation
+
 }
 
 //TODO fix access modifiers, getters, setters
