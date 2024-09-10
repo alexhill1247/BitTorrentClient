@@ -480,6 +480,14 @@ public class Torrent {
 
     //TODO torrent creation
 
+
+    public void updateTrackers(Tracker.trackerEvent ev, String addr, int port) {
+        for (Tracker tracker : trackers) {
+            tracker.update(this, ev, addr, port);
+        }
+    }
+
+    //TODO public void resetTrackersLastUpdated(){}
 }
 
 //TODO fix access modifiers, getters, setters
