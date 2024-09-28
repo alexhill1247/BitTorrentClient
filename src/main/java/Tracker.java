@@ -1,5 +1,3 @@
-import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -19,7 +17,7 @@ public class Tracker {
 
     //TODO needs some sort of event handler for when peers are updated
 
-    public enum trackerEvent {
+    public enum TrackerEvent {
         started,
         paused,
         stopped
@@ -34,8 +32,8 @@ public class Tracker {
     public ZonedDateTime lastPeerRequest = ZonedDateTime.from(Instant.EPOCH);
     public Duration peerRequestInterval = Duration.ofMinutes(30);
 
-    public void update(Torrent torrent, trackerEvent ev, String id, int port) {
-        if (ev == trackerEvent.started && ZonedDateTime.now().isBefore(lastPeerRequest.plus(peerRequestInterval))) {
+    public void update(Torrent torrent, TrackerEvent ev, String id, int port) {
+        if (ev == TrackerEvent.started && ZonedDateTime.now().isBefore(lastPeerRequest.plus(peerRequestInterval))) {
             return;
         }
 

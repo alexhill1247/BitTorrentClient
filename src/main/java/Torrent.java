@@ -1,6 +1,5 @@
 import java.io.*;
 import java.net.URLEncoder;
-import java.nio.Buffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -481,7 +480,7 @@ public class Torrent {
     //TODO torrent creation
 
 
-    public void updateTrackers(Tracker.trackerEvent ev, String addr, int port) {
+    public void updateTrackers(Tracker.TrackerEvent ev, String addr, int port) {
         for (Tracker tracker : trackers) {
             tracker.update(this, ev, addr, port);
         }
