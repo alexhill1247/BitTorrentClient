@@ -224,20 +224,19 @@ public class Peer {
         }
     }
 
-    //TODO potential issue with indices
-    public static Handshake decodeHandshake(byte[] bytes) {
+    public static HandshakeResult decodeHandshake(byte[] bytes) {
         byte[] hash = new byte[20];
         String id = "";
 
         if (bytes.length != 68 || bytes[0] != 19) {
             System.out.println("Invalid handshake 1");
-            return new Handshake(false, null, null);
+            return new HandshakeResult(false, null, null);
         }
 
         byte[] temp = Arrays.copyOfRange(bytes, 1, 20);
         if (!new String(temp, StandardCharsets.UTF_8).equals("BitTorrent protocol")) {
             System.out.println("Invalid handshake 2");
-            return new Handshake(false, null, null);
+            return new HandshakeResult(false, null, null);
         }
 
         hash = Arrays.copyOfRange(bytes, 28, 48);
@@ -245,7 +244,7 @@ public class Peer {
         temp = Arrays.copyOfRange(bytes, 48, 68);
         id = new String(temp, StandardCharsets.UTF_8);
 
-        return new Handshake(true, hash, id);
+        return new HandshakeResult(true, hash, id);
     }
 
     public static byte[] encodeHandshake(byte[] hash, String id) {
@@ -265,8 +264,8 @@ public class Peer {
     }
 
     public static boolean decodeKeepAlive(byte[] bytes) {
-        // Ensure byte order is big endian
-        ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN);
+        // Wrap bytes to ensure order is big-endian
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
         if (bytes.length != 4 || buffer.getInt(0) != 0) {
             System.out.println("Invalid keep-alive");
             return false;
@@ -275,7 +274,7 @@ public class Peer {
     }
 
     public static byte[] encodeKeepAlive() {
-        ByteBuffer buffer = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
+        ByteBuffer buffer = ByteBuffer.allocate(4);
         return buffer.putInt(0).array();
     }
 
@@ -296,7 +295,7 @@ public class Peer {
     }
 
     public static boolean decodeState(byte[] bytes, MessageType type) {
-        ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN);
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
         if (bytes.length != 5 || buffer.getInt(0) != 1 || bytes[4] != (byte) type.getValue()) {
             System.out.println("Invalid" + type.toString());
             return false;
@@ -322,14 +321,14 @@ public class Peer {
 
     public static byte[] encodeState(MessageType type) {
         byte[] message = new byte[5];
-        ByteBuffer buffer = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(1);
+        ByteBuffer buffer = ByteBuffer.allocate(4).putInt(1);
         System.arraycopy(buffer.array(), 0, message, 0, 4);
         message[4] = (byte) type.getValue();
         return message;
     }
 
     public static int decodeHave(byte[] bytes) {
-        ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN);
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
         if (bytes.length != 9 || buffer.getInt(0) != 5) {
             System.out.println("Invalid have");
             return -1;
@@ -340,7 +339,7 @@ public class Peer {
     public static boolean decodeBitfield(byte[] bytes, int pieces, boolean[] isPieceDownloaded) {
 
         int expectedLength = (int) Math.ceil(pieces / 8.0) + 1;
-        ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN);
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
         if (bytes.length != expectedLength + 4 || buffer.getInt(0) != expectedLength) {
             System.out.println("Invalid bitfield, first byte not " + expectedLength);
             return false;
@@ -357,7 +356,7 @@ public class Peer {
     public static byte[] encodeHave(int index) {
         byte[] message = new byte[9];
 
-        ByteBuffer buffer = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(5);
+        ByteBuffer buffer = ByteBuffer.allocate(4).putInt(5);
         System.arraycopy(buffer.array(), 0, message, 0, 4);
         message[4] = (byte) MessageType.have.getValue();
         buffer.clear().putInt(index);
@@ -375,7 +374,7 @@ public class Peer {
 
         byte[] message = new byte[length + 4];
 
-        ByteBuffer buffer = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN);
+        ByteBuffer buffer = ByteBuffer.allocate(4);
         buffer.putInt(length);
         System.arraycopy(buffer.array(), 0, message, 0, 4);
         message[4] = (byte) MessageType.bitfield.getValue();
@@ -391,6 +390,82 @@ public class Peer {
         }
 
         System.arraycopy(reversed.toByteArray(), 0, message, 5, reversed.length());
+
+        return message;
+    }
+
+    // Used for request and cancel message
+    public static RequestResult decodeRequest(byte[] bytes) {
+        int index = -1;
+        int begin = -1;
+        int length = -1;
+
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+
+        if (bytes.length != 17 || buffer.getInt(0) != 13) {
+            System.out.println("Invalid request/cancel");
+            return new RequestResult(false, index, begin, length);
+        }
+
+        index = buffer.getInt(5);
+        begin = buffer.getInt(9);
+        length = buffer.getInt(13);
+
+        return new RequestResult(true, index, begin, length);
+    }
+
+    public static PieceResult decodePiece(byte[] bytes) {
+        int index = -1;
+        int begin = -1;
+        byte[] data = new byte[0];
+
+        if (bytes.length < 13) {
+            System.out.println("Invalid piece");
+            return new PieceResult(false, index, begin, data);
+        }
+
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+
+        index = buffer.getInt(5);
+        begin = buffer.getInt(9);
+        int length = buffer.getInt(0) - 9;
+        data = new byte[length];
+        System.arraycopy(bytes, 13, data, 0, length);
+
+        return new PieceResult(true, index, begin, data);
+    }
+
+    public static byte[] encodeRequest(MessageType type, int index, int begin, int length) {
+        byte[] message = new byte[17];
+
+        ByteBuffer buffer = ByteBuffer.allocate(4);
+
+        buffer.putInt(13);
+        System.arraycopy(buffer.array(), 0, message, 0, 4);
+        message[4] = (byte) type.getValue();
+        buffer.clear().putInt(index);
+        System.arraycopy(buffer.array(), 0, message, 5, 4);
+        buffer.clear().putInt(begin);
+        System.arraycopy(buffer.array(), 0, message, 9, 4);
+        buffer.clear().putInt(length);
+        System.arraycopy(buffer.array(), 0, message, 13, 4);
+
+        return message;
+    }
+
+    public static byte[] encodePiece(int index, int begin, byte[] data) {
+        int length = data.length + 9;
+
+        byte[] message = new byte[length + 4];
+        ByteBuffer buffer = ByteBuffer.allocate(4);
+        buffer.putInt(length);
+        System.arraycopy(buffer.array(), 0, message, 0, 4);
+        message[4] = (byte) MessageType.piece.getValue();
+        buffer.clear().putInt(index);
+        System.arraycopy(buffer.array(), 0, message, 5, 4);
+        buffer.clear().putInt(begin);
+        System.arraycopy(buffer.array(), 0, message, 9, 4);
+        System.arraycopy(data, 0, message, 13, data.length);
 
         return message;
     }
