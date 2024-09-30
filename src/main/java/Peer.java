@@ -1,7 +1,6 @@
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 import java.nio.charset.StandardCharsets;
@@ -357,6 +356,8 @@ public class Peer {
 
     public static boolean decodeBitfield(byte[] bytes, int pieces, boolean[] isPieceDownloaded) {
 
+        isPieceDownloaded = new boolean[pieces];
+
         int expectedLength = (int) Math.ceil(pieces / 8.0) + 1;
         ByteBuffer buffer = ByteBuffer.wrap(bytes);
         if (bytes.length != expectedLength + 4 || buffer.getInt(0) != expectedLength) {
@@ -597,16 +598,92 @@ public class Peer {
                 return;
             }
         }
-
         else if (type == MessageType.keepAlive && decodeKeepAlive(bytes)) {
             handleKeepAlive();
             return;
         }
-
         else if (type == MessageType.choke && decodeChoke(bytes)) {
             handleChoke();
             return;
         }
+        else if (type == MessageType.unchoke && decodeUnchoke(bytes)) {
+            handleUnchoke();
+            return;
+        }
+        else if (type == MessageType.interested && decodeInterested(bytes)) {
+            handleInterested();
+            return;
+        }
+        else if (type == MessageType.notInterested && decodeNotInterested(bytes)) {
+            handleNotInterested();
+            return;
+        }
+        else if (type == MessageType.have) {
+            int index = decodeHave(bytes);
+            if (index != -1) {
+                handleHave(index);
+                return;
+            }
+        }
+        else if (type == MessageType.bitfield) {
+            boolean[] isPieceDownloaded = new boolean[0];
+            if (decodeBitfield(bytes, this.isPieceDownloaded.length, isPieceDownloaded)) {
+                handleBitfield(isPieceDownloaded);
+                return;
+            }
+        }
+        else if (type == MessageType.request || type == MessageType.cancel) {
+            RequestResult result = decodeRequest(bytes);
+            if (result.success) {
+                //TODO potentially send message type as well
+                handleRequest(result.index, result.begin, result.length);
+                return;
+            }
+        }
+        else if (type == MessageType.piece) {
+            PieceResult result = decodePiece(bytes);
+            if (result.success) {
+                handlePiece(result.index, result.begin, result.data);
+                return;
+            }
+        }
+        else if (type == MessageType.port) {
+            System.out.println(this + " <- port: " + bytesToHexString(bytes));
+            return;
+        }
+
+        System.out.println(this + " unhandled incoming message " + bytesToHexString(bytes));
+        disconnect();
     }
 
+    private String bytesToHexString(byte[] bytes) {
+        return IntStream.range(0, bytes.length)
+                .mapToObj(i -> String.format("%02x", bytes[i]))
+                .collect(Collectors.joining());
+    }
+
+    private void handleHandshake(byte[] hash, String id) {
+        System.out.println(this + "<- handshake");
+
+        if (!Arrays.equals(torrent.infoHash, hash)) {
+            System.out.println("Invalid handshake, expected hash = " + bytesToHexString(torrent.infoHash) +
+                    ", received = " + bytesToHexString(hash));
+            disconnect();
+            return;
+        }
+
+        this.id = id;
+        isHandshakeReceived = true;
+        sendBitfield(torrent.isPieceVerified);
+    }
+
+    //TODO just put this above?
+    private void handleKeepAlive() {
+        System.out.println(this + "<- keep alive");
+    }
+
+    //TODO why does this exist?
+    private void handlePort(int port) {
+        System.out.println(this + "<- port " + port);
+    }
 }
