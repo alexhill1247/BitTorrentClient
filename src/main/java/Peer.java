@@ -117,7 +117,7 @@ public class Peer {
                 public void completed(Void result, Void attachment) {
                     read();
                     sendHandshake();
-                    if (isHandshakeReceived) sendBitfield();
+                    if (isHandshakeReceived) sendBitfield(torrent.isPieceVerified);
                 }
                 @Override
                 public void failed(Throwable exc, Void attachment) {
@@ -172,7 +172,15 @@ public class Peer {
 
                 int messageLength = getMessageLength(data);
                 while (data.size() >= messageLength) {
-                    handleMessage(data.subList(0, messageLength).toArray(new Byte[0]));
+
+                    List<Byte> subList = data.subList(0, messageLength);
+                    byte[] subBytes = new byte[subList.size()];
+                    int i = 0;
+                    for (Byte b : subList) {
+                        subBytes[i++] = b;
+                    }
+                    handleMessage(subBytes);
+
                     data = (ArrayList<Byte>) data.subList(messageLength, data.size());
                     messageLength = getMessageLength(data);
                 }
@@ -222,7 +230,18 @@ public class Peer {
         public int getValue() {
             return value;
         }
+
+        public static MessageType fromValue(int value) {
+            for (MessageType type : MessageType.values()) {
+                if (type.getValue() == value) return type;
+            }
+            return unknown;
+        }
     }
+
+    //--------------------------------------------------------
+    //                 ENCODING & DECODING
+    //--------------------------------------------------------
 
     public static HandshakeResult decodeHandshake(byte[] bytes) {
         byte[] hash = new byte[20];
@@ -365,7 +384,7 @@ public class Peer {
         return message;
     }
 
-    public static byte[] encodeBitfield(boolean[] isPieceDownloaded) {
+    public static byte[] encodeBitfield(Boolean[] isPieceDownloaded) {
         int numPieces = isPieceDownloaded.length;
         int numBytes = (int) Math.ceil(numPieces / 8.0);
         int numBits = numBytes * 8;
@@ -468,6 +487,126 @@ public class Peer {
         System.arraycopy(data, 0, message, 13, data.length);
 
         return message;
+    }
+
+    //-----------------------------------------------------
+    //                 SENDING MESSAGES
+    //-----------------------------------------------------
+
+    private void sendHandshake() {
+        if (isHandshakeSent) return;
+
+        System.out.println(this + "-> handshake");
+        sendBytes(encodeHandshake(torrent.infoHash, localID));
+        isHandshakeSent = true;
+    }
+
+    public void sendKeepAlive() {
+        if (lastKeepAlive.isAfter(ZonedDateTime.now().minusSeconds(30))) return;
+
+        System.out.println(this + "-> keep alive");
+        sendBytes(encodeKeepAlive());
+        lastKeepAlive = ZonedDateTime.now();
+    }
+
+    public void sendChoke() {
+        if (isChokeSent) return;
+
+        System.out.println(this + "-> choke");
+        sendBytes(encodeChoke());
+        isChokeSent = true;
+    }
+
+    public void sendUnchoke() {
+        if (!isChokeSent) return;
+
+        System.out.println(this + "-> unchoke");
+        sendBytes(encodeUnchoke());
+        isChokeSent = false;
+    }
+
+    public void sendInterested() {
+        if (isInterestedSent) return;
+
+        System.out.println(this + "-> interested");
+        sendBytes(encodeInterested());
+        isInterestedSent = true;
+    }
+
+    public void sendNotInterested() {
+        if (!isInterestedSent) return;
+
+        System.out.println(this + "-> not interested");
+        sendBytes(encodeNotInterested());
+        isInterestedSent = false;
+    }
+
+    public void sendHave(int index) {
+        System.out.println(this + "-> have " + index);
+        sendBytes(encodeHave(index));
+    }
+
+    public void sendBitfield(Boolean[] isPieceDownloaded) {
+        System.out.println(this + "-> bitfield" +
+                Arrays.stream(isPieceDownloaded)
+                        .map(b -> b ? "1" : "0")
+                        .collect(Collectors.joining())
+        );
+        sendBytes(encodeBitfield(isPieceDownloaded));
+    }
+
+    public void sendRequest(MessageType type, int index, int begin, int length) {
+        System.out.println(this + "-> " + type.toString() + " " + index + ", " + begin + ", " + length);
+        sendBytes(encodeRequest(type, index, begin, length));
+    }
+
+    public void sendPiece(int index, int begin, byte[] data) {
+        System.out.println(this + "-> piece " + index + ", " + begin + ", " + data.length);
+        sendBytes(encodePiece(index, begin, data));
+        uploaded += data.length;
+    }
+
+    //--------------------------------------------------
+    //               RECEIVING MESSAGES
+    //--------------------------------------------------
+
+    private MessageType getMessageType(byte[] bytes) {
+        if (isHandshakeReceived) return MessageType.handshake;
+
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+        if (bytes.length == 4 && buffer.getInt(0) == 0) {
+            return MessageType.keepAlive;
+        }
+
+        if (bytes.length > 4) return MessageType.fromValue(bytes[4]);
+
+        return MessageType.unknown;
+    }
+
+    private void handleMessage(byte[] bytes) {
+        lastActive = ZonedDateTime.now();
+
+        MessageType type = getMessageType(bytes);
+
+        if (type == MessageType.unknown) return;
+
+        else if (type == MessageType.handshake) {
+            HandshakeResult result = decodeHandshake(bytes);
+            if (result.success) {
+                handleHandshake(result.hash, result.id);
+                return;
+            }
+        }
+
+        else if (type == MessageType.keepAlive && decodeKeepAlive(bytes)) {
+            handleKeepAlive();
+            return;
+        }
+
+        else if (type == MessageType.choke && decodeChoke(bytes)) {
+            handleChoke();
+            return;
+        }
     }
 
 }
