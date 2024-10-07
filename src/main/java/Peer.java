@@ -659,8 +659,8 @@ public class Peer {
         else if (type == MessageType.request || type == MessageType.cancel) {
             RequestResult result = decodeRequest(bytes);
             if (result.success) {
-                //TODO potentially send message type as well
-                handleRequest(result.index, result.begin, result.length);
+                if (type == MessageType.request) handleRequest(result.index, result.begin, result.length);
+                if (type == MessageType.cancel)  handleCancel (result.index, result.begin, result.length);
                 return;
             }
         }
@@ -709,5 +709,92 @@ public class Peer {
     //TODO why does this exist?
     private void handlePort(int port) {
         System.out.println(this + "<- port " + port);
+    }
+
+    private void handleChoke() {
+        System.out.println(this + "<- choke");
+        isChokeReceived = true;
+
+        if (stateChangedListener != null) {
+            stateChangedListener.onStateChanged();
+        }
+    }
+
+    private void handleUnchoke() {
+        System.out.println(this + "<- unchoke");
+        isChokeReceived = false;
+
+        if (stateChangedListener != null) {
+            stateChangedListener.onStateChanged();
+        }
+    }
+
+    private void handleInterested() {
+        System.out.println(this + "<- interested");
+        isInterestedReceived = true;
+
+        if (stateChangedListener != null) {
+            stateChangedListener.onStateChanged();
+        }
+    }
+
+    private void handleNotInterested() {
+        System.out.println(this + "<- not interested");
+        isInterestedReceived = false;
+
+        if (stateChangedListener != null) {
+            stateChangedListener.onStateChanged();
+        }
+    }
+
+    private void handleHave(int index) {
+        isPieceDownloaded[index] = true;
+        System.out.println(this + "<- have " + index + " - " + getPiecesDownloadedCount() +
+                " available (" + getPiecesDownloaded() + ")"
+        );
+
+        if (stateChangedListener != null) {
+            stateChangedListener.onStateChanged();
+        }
+    }
+
+    private void handleBitfield(boolean[] isPieceDownloaded) {
+        for (int i = 0; i < torrent.getPieceCount(); i++) {
+            // Keep true if already true, otherwise set to passed param
+            this.isPieceDownloaded[i] = this.isPieceDownloaded[i] || isPieceDownloaded[i];
+        }
+
+        System.out.println(this + "<- bitfield " + getPiecesDownloadedCount() +
+                " available (" + getPiecesDownloaded() + ")"
+        );
+
+        if (stateChangedListener != null) {
+            stateChangedListener.onStateChanged();
+        }
+    }
+
+    private void handleRequest(int index, int begin, int length) {
+        System.out.println(this + "<- request " + index + ", " + begin + ", " + length);
+
+        if (blockRequestedListener != null) {
+            blockRequestedListener.onBlockRequested(new DataRequest(this, index, begin, length));
+        }
+    }
+
+    private void handlePiece(int index, int begin, byte[] data) {
+        System.out.println(this + "<- piece " + index + ", " + begin + ", " + data.length);
+        downloaded += data.length;
+
+        if (blockReceivedListener != null) {
+            blockReceivedListener.onBlockReceived(new DataPackage(this, index, begin / torrent.blockSize, data));
+        }
+    }
+
+    private void handleCancel(int index, int begin, int length) {
+        System.out.println(this + "<- cancel");
+
+        if (blockCancelledListener != null) {
+            blockCancelledListener.onBlockCancelled(new DataRequest(this, index, begin, length));
+        }
     }
 }
