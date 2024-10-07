@@ -14,7 +14,31 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class Peer {
-    //TODO event handlers
+    private EventListeners.DisconnectedListener disconnectedListener;
+    private EventListeners.StateChangedListener stateChangedListener;
+    private EventListeners.BlockRequestedListener blockRequestedListener;
+    private EventListeners.BlockCancelledListener blockCancelledListener;
+    private EventListeners.BlockReceivedListener blockReceivedListener;
+
+    public void setDisconnectedListener(EventListeners.DisconnectedListener listener) {
+        this.disconnectedListener = listener;
+    }
+
+    public void setStateChangedListener(EventListeners.StateChangedListener listener) {
+        this.stateChangedListener = listener;
+    }
+
+    public void setBlockRequestedListener(EventListeners.BlockRequestedListener listener) {
+        this.blockRequestedListener = listener;
+    }
+
+    public void setBlockCancelledListener(EventListeners.BlockCancelledListener listener) {
+        this.blockCancelledListener = listener;
+    }
+
+    public void setBlockReceivedListener(EventListeners.BlockReceivedListener listener) {
+        this.blockReceivedListener = listener;
+    }
 
     public String localID;
     public String id;
