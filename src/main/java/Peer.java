@@ -166,7 +166,9 @@ public class Peer {
             e.printStackTrace();
         }
 
-        //TODO disconnected event
+        if (disconnectedListener != null) {
+            disconnectedListener.onDisconnected();
+        }
     }
 
     private void sendBytes(byte[] bytes) {
