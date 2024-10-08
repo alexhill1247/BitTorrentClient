@@ -40,6 +40,14 @@ public class Peer {
         this.blockReceivedListener = listener;
     }
 
+    public void removeListeners() {
+        this.disconnectedListener = null;
+        this.stateChangedListener = null;
+        this.blockRequestedListener = null;
+        this.blockCancelledListener = null;
+        this.blockReceivedListener = null;
+    }
+
     public String localID;
     public String id;
 
@@ -96,8 +104,8 @@ public class Peer {
                 .sum();
     }
 
-    public ZonedDateTime lastActive;
-    public ZonedDateTime lastKeepAlive = ZonedDateTime.from(Instant.EPOCH);
+    public Instant lastActive;
+    public Instant lastKeepAlive = Instant.EPOCH;
 
     public long uploaded;
     public long downloaded;
@@ -123,7 +131,7 @@ public class Peer {
         this.torrent = torrent;
         this.localID = localID;
 
-        lastActive = ZonedDateTime.now();
+        lastActive = Instant.now();
         int pieceCount = torrent.getPieceCount();
         isPieceDownloaded = new Boolean[pieceCount];
         isBlockRequested = new Boolean[pieceCount][];
@@ -167,7 +175,7 @@ public class Peer {
         }
 
         if (disconnectedListener != null) {
-            disconnectedListener.onDisconnected();
+            disconnectedListener.onDisconnected(this);
         }
     }
 
@@ -529,11 +537,11 @@ public class Peer {
     }
 
     public void sendKeepAlive() {
-        if (lastKeepAlive.isAfter(ZonedDateTime.now().minusSeconds(30))) return;
+        if (lastKeepAlive.isAfter(Instant.now().minusSeconds(30))) return;
 
         System.out.println(this + "-> keep alive");
         sendBytes(encodeKeepAlive());
-        lastKeepAlive = ZonedDateTime.now();
+        lastKeepAlive = Instant.now();
     }
 
     public void sendChoke() {
@@ -611,7 +619,7 @@ public class Peer {
     }
 
     private void handleMessage(byte[] bytes) {
-        lastActive = ZonedDateTime.now();
+        lastActive = Instant.now();
 
         MessageType type = getMessageType(bytes);
 
@@ -800,3 +808,5 @@ public class Peer {
         }
     }
 }
+
+//TODO check usages of ZonedDateTime vs Instant

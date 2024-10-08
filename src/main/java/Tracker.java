@@ -108,6 +108,8 @@ public class Tracker {
             peers.add(new InetSocketAddress(address, port));
         }
 
-        //TODO update peer list
+        if (peerListUpdatedListener != null) {
+            peerListUpdatedListener.onPeerListUpdated(this, peers);
+        }
     }
 }

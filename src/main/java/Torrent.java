@@ -167,6 +167,12 @@ public class Torrent {
         }
     }
 
+    public void resetTrackersLastRequest() {
+        for (var tracker : trackers) {
+            tracker.resetLastRequest();
+        }
+    }
+
     //------------------------------------------------------
     //                 READING / WRITING
     //------------------------------------------------------
@@ -491,6 +497,5 @@ public class Torrent {
 }
 
 //TODO fix access modifiers, getters, setters
-//TODO add torrent constructor overloading to support default
-// values
+//TODO add torrent constructor overloading to support default values
 //TODO event handling

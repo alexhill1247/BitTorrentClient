@@ -1,6 +1,6 @@
 public class EventListeners {
     public interface DisconnectedListener {
-        void onDisconnected();
+        void onDisconnected(Peer peer);
     }
 
     public interface StateChangedListener {
