@@ -8,7 +8,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.IntStream;
 
 public class Client {
     public int port;
@@ -39,8 +41,8 @@ public class Client {
     private boolean isStopping;
     //TODO dont like these names
     private AtomicBoolean isProcessPeers = new AtomicBoolean(false);
-    private int isProcessUploads = 0;
-    private int isProcessDownloads = 0;
+    private AtomicBoolean isProcessUploads = new AtomicBoolean(false);
+    private AtomicBoolean isProcessDownloads = new AtomicBoolean(false);
 
     public void start() {
         System.out.println("Starting client");
@@ -291,5 +293,131 @@ public class Client {
                     }
                 });
         isProcessPeers.set(false);
+    }
+
+    //-----------------------------------
+    //             Uploads
+    //-----------------------------------
+
+    private ConcurrentLinkedQueue<DataRequest> outgoingBlocks = new ConcurrentLinkedQueue<>();
+
+    private void handleBlockRequested(DataRequest block) {
+        outgoingBlocks.add(block);
+        processUploads();
+    }
+
+    private void handleBlockCancelled(DataRequest block) {
+        for (var item : outgoingBlocks) {
+            if (item.peer != block.peer || item.piece != block.piece ||
+                    item.begin != block.begin || item.length != block.length) {
+                continue;
+            }
+            item.isCancelled = true;
+        }
+        processUploads();
+    }
+
+    private Throttle uploadThrottle = new Throttle(
+            maxUploadBytesPerSec,
+            Duration.ofSeconds(1)
+    );
+
+    private void processUploads() {
+        if (!isProcessUploads.compareAndSet(false, true)) return;
+
+        DataRequest block;
+        while (!uploadThrottle.isThrottled() && (block = outgoingBlocks.poll()) != null) {
+            if (block.isCancelled) continue;
+            if (!torrent.isPieceVerified[block.piece]) continue;
+
+            byte[] data = torrent.readBlock(block.piece, block.begin, block.length);
+            if (data == null) continue;
+
+            block.peer.sendPiece(block.piece, block.begin, data);
+            uploadThrottle.add(block.length);
+            torrent.uploaded += block.length;
+        }
+        isProcessUploads.set(false);
+    }
+
+    //----------------------------------
+    //            Downloads
+    //----------------------------------
+
+    private ConcurrentLinkedQueue<DataPackage> incomingBlocks = new ConcurrentLinkedQueue<>();
+
+    private void handleBlockReceived(DataPackage args) {
+        incomingBlocks.add(args);
+
+        args.peer.isBlockRequested[args.piece][args.block] = false;
+
+        peers.values().forEach(peer -> {
+            if (!peer.isBlockRequested[args.piece][args.block]) return;
+            peer.sendRequest(Peer.MessageType.cancel, args.piece, args.block * torrent.blockSize, torrent.blockSize);
+            peer.isBlockRequested[args.piece][args.block] = false;
+        });
+
+        processDownloads();
+    }
+
+    private Throttle downloadThrottle = new Throttle(
+            maxDownloadBytesPerSec,
+            Duration.ofSeconds(1)
+    );
+
+    private void processDownloads() {
+        if (!isProcessDownloads.compareAndSet(false, true)) return;
+
+        DataPackage incomingBlock;
+        while((incomingBlock = incomingBlocks.poll()) != null) {
+            torrent.writeBlock(incomingBlock.piece, incomingBlock.block, incomingBlock.data);
+        }
+
+        if (torrent.isCompleted()) {
+            isProcessDownloads.set(false);
+            return;
+        }
+
+        int[] ranked = getRankedPieces();
+
+        for (var piece : ranked) {
+            if (torrent.isPieceVerified[piece]) continue;
+
+            for (Peer peer : getRankedSeeders()) {
+                if (!peer.isPieceDownloaded[piece]) continue;
+
+                for (int block = 0; block < torrent.getBlockCount(piece); block++) {
+                    if (downloadThrottle.isThrottled()) continue;
+                    if (torrent.isBlockAcquired[piece][block]) continue;
+
+                    // Request max one block from each peer
+                    if (peer.getBlocksRequested() > 0) continue;
+
+                    // Request from one peer
+                    int finalBlock = block;
+                    if (peers.values().stream().anyMatch(x -> x.isBlockRequested[piece][finalBlock])) continue;
+
+                    int size = torrent.getBlockSize(piece, finalBlock);
+                    peer.sendRequest(Peer.MessageType.request, piece, finalBlock * torrent.blockSize, size);
+                    downloadThrottle.add(size);
+                    peer.isBlockRequested[piece][finalBlock] = true;
+                }
+            }
+        }
+        isProcessDownloads.set(false);
+    }
+
+    // Randomly order seeders
+    private Peer[] getRankedSeeders() {
+        List<Peer> seederList = new ArrayList<>(seeders.values());
+        Collections.shuffle(seederList, new Random());
+        return seederList.toArray(new Peer[0]);
+    }
+
+    private int[] getRankedPieces() {
+        int[] indices = IntStream.range(0, torrent.getPieceCount()).toArray();
+        int[] scores = Arrays.stream(indices).map(this::getPieceScore).toArray();
+
+        //TODO continue implementation
     }
 }
