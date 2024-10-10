@@ -7,7 +7,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -15,7 +14,11 @@ import java.util.concurrent.CompletableFuture;
 
 public class Tracker {
 
-    //TODO needs some sort of event handler for when peers are updated
+    private EventListeners.PeerListUpdatedListener peerListUpdatedListener;
+
+    public void setPeerListUpdatedListener(EventListeners.PeerListUpdatedListener listener) {
+        this.peerListUpdatedListener = listener;
+    }
 
     public enum TrackerEvent {
         started,
@@ -29,15 +32,15 @@ public class Tracker {
         this.address = address;
     }
 
-    public ZonedDateTime lastPeerRequest = ZonedDateTime.from(Instant.EPOCH);
+    public Instant lastPeerRequest = Instant.EPOCH;
     public Duration peerRequestInterval = Duration.ofMinutes(30);
 
     public void update(Torrent torrent, TrackerEvent ev, String id, int port) {
-        if (ev == TrackerEvent.started && ZonedDateTime.now().isBefore(lastPeerRequest.plus(peerRequestInterval))) {
+        if (ev == TrackerEvent.started && Instant.now().isBefore(lastPeerRequest.plus(peerRequestInterval))) {
             return;
         }
 
-        lastPeerRequest = ZonedDateTime.now();
+        lastPeerRequest = Instant.now();
 
         String format = "%s?info_hash=%s&peer_id=%s&port=%d&uploaded=%d&downloaded=%d&left=%d&event=%s&compact=1";
         String url = String.format(format,
@@ -54,7 +57,7 @@ public class Tracker {
     }
 
     public void resetLastRequest() {
-        lastPeerRequest = ZonedDateTime.from(Instant.EPOCH);
+        lastPeerRequest = Instant.EPOCH;
     }
 
     public void request(String url) {

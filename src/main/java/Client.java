@@ -3,7 +3,6 @@ import java.net.*;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
-import java.nio.channels.ServerSocketChannel;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -28,8 +27,8 @@ public class Client {
         this.port = port;
 
         torrent = Torrent.loadFromFile(torrentPath, downloadPath);
-        //TODO register Torrent.PieceVerified event to handlePieceVerified
-        //TODO ''               PeerListUpdated ''
+        torrent.setPieceVerifiedListener(this::handlePieceVerified);
+        torrent.setPeerListUpdatedListener(this::handlePeerListUpdated);
 
         System.out.println(torrent);
     }
@@ -39,10 +38,9 @@ public class Client {
     //----------------------------------
 
     private boolean isStopping;
-    //TODO dont like these names
-    private AtomicBoolean isProcessPeers = new AtomicBoolean(false);
-    private AtomicBoolean isProcessUploads = new AtomicBoolean(false);
-    private AtomicBoolean isProcessDownloads = new AtomicBoolean(false);
+    private AtomicBoolean isProcessingPeers = new AtomicBoolean(false);
+    private AtomicBoolean isProcessingUploads = new AtomicBoolean(false);
+    private AtomicBoolean isProcessingDownloads = new AtomicBoolean(false);
 
     public void start() {
         System.out.println("Starting client");
@@ -142,7 +140,7 @@ public class Client {
         return ip;
     }
 
-    private void handlePeerListUpdated(Object sender, ArrayList<InetSocketAddress> endPoints) {
+    private void handlePeerListUpdated(Object sender, List<InetSocketAddress> endPoints) {
         InetAddress localIP;
         try {
             localIP = getLocalIPAddress();
@@ -216,16 +214,17 @@ public class Client {
 
         peer.connect();
 
-        //TODO unsure if this is necessary
-        if (peers.putIfAbsent(peer.key, peer) == null) peer.disconnect();
+        //TODO change this
+        // if fails to add peer, disconnect
+        if (peers.putIfAbsent(peer.getKey(), peer) == null) peer.disconnect();
     }
 
     private void handlePeerDisconnected(Peer peer) {
         peer.removeListeners();
 
-        peers.remove(peer.key);
-        seeders.remove(peer.key);
-        leechers.remove(peer.key);
+        peers.remove(peer.getKey());
+        seeders.remove(peer.getKey());
+        leechers.remove(peer.getKey());
     }
 
     private void handlePeerStateChanged() {
@@ -242,18 +241,16 @@ public class Client {
         }
     }
 
-    //TODO include these in setting menu maybe?
+    //TODO include these in setting menu
     private final int maxLeechers = 5;
     private final int maxSeeders = 5;
-
-    //TODO ''
     private final int maxUploadBytesPerSec = 16384;
     private final int maxDownloadBytesPerSec = 16384;
 
     private final Duration peerTimeout = Duration.ofSeconds(30);
 
     private void processPeers() {
-        if (!isProcessPeers.compareAndSet(false, true)) return;
+        if (!isProcessingPeers.compareAndSet(false, true)) return;
 
         peers.values().stream()
                 .sorted(Comparator.comparingInt(Peer::getPiecesRequiredAvailable).reversed())
@@ -288,11 +285,11 @@ public class Client {
 
                     if (!torrent.isCompleted() && seeders.size() <= maxSeeders) {
                         if (!peer.isChokeReceived) {
-                            seeders.put(peer.key, peer);
+                            seeders.put(peer.getKey(), peer);
                         }
                     }
                 });
-        isProcessPeers.set(false);
+        isProcessingPeers.set(false);
     }
 
     //-----------------------------------
@@ -323,7 +320,7 @@ public class Client {
     );
 
     private void processUploads() {
-        if (!isProcessUploads.compareAndSet(false, true)) return;
+        if (!isProcessingUploads.compareAndSet(false, true)) return;
 
         DataRequest block;
         while (!uploadThrottle.isThrottled() && (block = outgoingBlocks.poll()) != null) {
@@ -337,7 +334,7 @@ public class Client {
             uploadThrottle.add(block.length);
             torrent.uploaded += block.length;
         }
-        isProcessUploads.set(false);
+        isProcessingUploads.set(false);
     }
 
     //----------------------------------
@@ -366,7 +363,7 @@ public class Client {
     );
 
     private void processDownloads() {
-        if (!isProcessDownloads.compareAndSet(false, true)) return;
+        if (!isProcessingDownloads.compareAndSet(false, true)) return;
 
         DataPackage incomingBlock;
         while((incomingBlock = incomingBlocks.poll()) != null) {
@@ -374,7 +371,7 @@ public class Client {
         }
 
         if (torrent.isCompleted()) {
-            isProcessDownloads.set(false);
+            isProcessingDownloads.set(false);
             return;
         }
 
@@ -404,7 +401,7 @@ public class Client {
                 }
             }
         }
-        isProcessDownloads.set(false);
+        isProcessingDownloads.set(false);
     }
 
     // Randomly order seeders

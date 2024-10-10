@@ -32,3 +32,9 @@ public class Program {
         }
     }
 }
+
+
+//TODO
+// check unused methods and variables
+// check access modifiers
+// check event handling set up correctly

@@ -1,4 +1,5 @@
 import java.io.*;
+import java.net.InetSocketAddress;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -96,7 +97,11 @@ public class Torrent {
         return URLEncoder.encode(infoHashStr, StandardCharsets.UTF_8);
     }
 
-    //TODO peerlist event handler
+    private EventListeners.PeerListUpdatedListener peerListUpdatedListener;
+
+    public void setPeerListUpdatedListener(EventListeners.PeerListUpdatedListener listener) {
+        this.peerListUpdatedListener = listener;
+    }
 
     private Object[] fileWriteLocks;
     private static MessageDigest sha1;
@@ -123,7 +128,7 @@ public class Torrent {
             for (String url : trackers) {
                 Tracker tracker = new Tracker(url);
                 this.trackers.add(tracker);
-                //TODO trigger peer list event
+                tracker.setPeerListUpdatedListener(this::handlePeerListUpdated);
             }
         }
 
@@ -170,6 +175,12 @@ public class Torrent {
     public void resetTrackersLastRequest() {
         for (var tracker : trackers) {
             tracker.resetLastRequest();
+        }
+    }
+
+    private void handlePeerListUpdated(Object sender, List<InetSocketAddress> endPoints) {
+        if (peerListUpdatedListener != null) {
+            peerListUpdatedListener.onPeerListUpdated(sender, endPoints);
         }
     }
 
@@ -262,7 +273,11 @@ public class Torrent {
     //                     VERIFYING
     //-----------------------------------------------------
 
-    //TODO handle pieceVerified event
+    private EventListeners.PieceVerifiedListener pieceVerifiedListener;
+
+    public void setPieceVerifiedListener(EventListeners.PieceVerifiedListener listener) {
+        pieceVerifiedListener = listener;
+    }
 
     public void verify(int piece) {
         byte[] hash = getHash(piece);
@@ -274,7 +289,9 @@ public class Torrent {
 
             Arrays.fill(isBlockAcquired[piece], true);
 
-            //TODO piece verified
+            if (pieceVerifiedListener != null) {
+                pieceVerifiedListener.onPieceVerified(piece);
+            }
 
             return;
         }
@@ -496,6 +513,4 @@ public class Torrent {
     //TODO public void resetTrackersLastUpdated(){}
 }
 
-//TODO fix access modifiers, getters, setters
 //TODO add torrent constructor overloading to support default values
-//TODO event handling

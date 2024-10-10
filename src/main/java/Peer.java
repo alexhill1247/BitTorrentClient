@@ -5,7 +5,6 @@ import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -54,7 +53,6 @@ public class Peer {
     public Torrent torrent;
 
     public InetSocketAddress inetSocketAddress;
-    public String key;
     public String getKey() {
         return inetSocketAddress.toString();
     }
@@ -711,12 +709,10 @@ public class Peer {
         sendBitfield(torrent.isPieceVerified);
     }
 
-    //TODO just put this above?
     private void handleKeepAlive() {
         System.out.println(this + "<- keep alive");
     }
 
-    //TODO why does this exist?
     private void handlePort(int port) {
         System.out.println(this + "<- port " + port);
     }
@@ -808,5 +804,3 @@ public class Peer {
         }
     }
 }
-
-//TODO check usages of ZonedDateTime vs Instant
