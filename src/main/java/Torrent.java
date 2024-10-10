@@ -85,13 +85,7 @@ public class Torrent {
     }
 
     public byte[] infoHash = new byte[20];
-    // Maps each value in infoHash into its hexadecimal representation and joins it as a string
-    //TODO can probably get rid of this and just do it in peer class where the hash is used
-    public String getHexStringInfoHash() {
-        return IntStream.range(0, infoHash.length)
-                .mapToObj(i -> String.format("%02x", infoHash[i]))
-                .collect(Collectors.joining());
-    }
+
     public String getUrlSafeInfoHash() {
         String infoHashStr = new String(infoHash, StandardCharsets.UTF_8);
         return URLEncoder.encode(infoHashStr, StandardCharsets.UTF_8);
@@ -169,12 +163,6 @@ public class Torrent {
 
         for (int i = 0; i < getPieceCount(); i++) {
             verify(i);
-        }
-    }
-
-    public void resetTrackersLastRequest() {
-        for (var tracker : trackers) {
-            tracker.resetLastRequest();
         }
     }
 
@@ -510,7 +498,11 @@ public class Torrent {
         }
     }
 
-    //TODO public void resetTrackersLastUpdated(){}
+    public void resetTrackersLastRequest() {
+        for (Tracker tracker : trackers) {
+            tracker.resetLastRequest();
+        }
+    }
 }
 
 //TODO add torrent constructor overloading to support default values
