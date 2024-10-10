@@ -416,8 +416,41 @@ public class Client {
 
     private int[] getRankedPieces() {
         int[] indices = IntStream.range(0, torrent.getPieceCount()).toArray();
-        int[] scores = Arrays.stream(indices).map(this::getPieceScore).toArray();
+        double[] scores = Arrays.stream(indices).mapToDouble(this::getPieceScore).toArray();
 
-        //TODO continue implementation
+        // Sort indices based on scores
+        Integer[] indicesCopy = Arrays.stream(indices).boxed().toArray(Integer[]::new);
+        Arrays.sort(indicesCopy, Comparator.comparingDouble(x -> scores[x]));
+        //TODO ensure this works properly
+        Collections.reverse(Arrays.asList(indicesCopy));
+        indices = Arrays.stream(indicesCopy).mapToInt(Integer::intValue).toArray();
+
+        return indices;
+    }
+
+    // Rank pieces based on progress, rarity, and a random value to prevent identical rankings
+    private double getPieceScore(int piece) {
+        double progress = getPieceProgress(piece);
+        double rarity = getPieceRarity(piece);
+
+        if (progress == 1.0) progress = 0;
+
+        double rand = new Random().nextDouble(100) / 1000.0;
+
+        return progress + rarity + rand;
+    }
+
+    // Find the piece progress from percentage of blocks already acquired
+    private double getPieceProgress(int index) {
+        return Arrays.stream(torrent.isBlockAcquired[index])
+                .mapToDouble(x -> x ? 1.0 : 0.0)
+                .average().orElse(0.0);
+    }
+
+    private double getPieceRarity(int index) {
+        if (peers.isEmpty()) return 0;
+        return peers.values().stream()
+                .mapToDouble(x -> x.isPieceDownloaded[index] ? 0.0 : 1.0)
+                .average().orElse(0.0);
     }
 }
