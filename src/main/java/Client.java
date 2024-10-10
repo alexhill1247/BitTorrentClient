@@ -214,9 +214,8 @@ public class Client {
 
         peer.connect();
 
-        //TODO change this
-        // if fails to add peer, disconnect
-        if (peers.putIfAbsent(peer.getKey(), peer) == null) peer.disconnect();
+        // Disconnect peer if it is already in the list
+        if (peers.putIfAbsent(peer.getKey(), peer) != null) peer.disconnect();
     }
 
     private void handlePeerDisconnected(Peer peer) {
