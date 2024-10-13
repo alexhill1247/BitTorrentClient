@@ -138,6 +138,7 @@ public class Torrent {
 
         for (int i = 0; i < getPieceCount(); i++) {
             isBlockAcquired[i] = new Boolean[getBlockCount(i)];
+            Arrays.fill(isBlockAcquired[i], false);
         }
 
         if (pieceHashes == null) {
@@ -282,8 +283,7 @@ public class Torrent {
 
         isPieceVerified[piece] = false;
 
-        // If verification fails reset each block
-        if (Arrays.stream(isBlockAcquired[piece]).allMatch(x -> x)) {
+        if (Arrays.stream(isBlockAcquired[piece]).allMatch(x -> x != null && x)) {
             Arrays.fill(isBlockAcquired[piece], false);
         }
     }
@@ -341,7 +341,7 @@ public class Torrent {
     private static Object torrentInfoToBEncodingObj(Torrent torrent) {
         HashMap<String, Object> dict = new HashMap<>();
 
-        dict.put("piece length", torrent.pieceSize);
+        dict.put("piece length", (long) torrent.pieceSize);
         byte[] pieces = new byte[20 * torrent.getPieceCount()];
         for (int i = 0; i < torrent.getPieceCount(); i++) {
             System.arraycopy(torrent.pieceHashes[i], 0, pieces, i * 20, 20);
@@ -380,6 +380,7 @@ public class Torrent {
         return dict;
     }
 
+    //FIXME does not decode properly
     public static String decodeUTF8Str(Object obj) {
         byte[] bytes;
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -400,20 +401,20 @@ public class Torrent {
 
     @SuppressWarnings("unchecked")
     public static Torrent BEncodingObjToTorrent(Object bencoding, String name, String downloadPath) {
-        HashMap<String, Object> obj = (HashMap<String, Object>) bencoding;
+        TreeMap<String, Object> obj = (TreeMap<String, Object>) bencoding;
         if (obj == null) throw new RuntimeException("Not a torrent file");
 
         List<String> trackers = new ArrayList<>();
         if (obj.containsKey("announce")) trackers.add(decodeUTF8Str(obj.get("announce")));
 
         if (!obj.containsKey("info")) throw new RuntimeException("Missing torrent info");
-        HashMap<String, Object> info = (HashMap<String, Object>) obj.get("info");
+        TreeMap<String, Object> info = (TreeMap<String, Object>) obj.get("info");
         if (info == null) throw new RuntimeException("Error with torrent info");
 
         List<FileItem> files = new ArrayList<>();
         if (info.containsKey("name") && info.containsKey("length")) {
             files.add(new FileItem(
-                    (String) info.get("name"),
+                    new String((byte[]) info.get("name"), StandardCharsets.UTF_8),
                     (long) info.get("length")
             ));
         } else if (info.containsKey("files")) {
@@ -444,7 +445,8 @@ public class Torrent {
         }
 
         if (!info.containsKey("piece length")) throw new RuntimeException("Error with piece length");
-        int pieceSize = (int) info.get("piece length");
+        Long temp = (Long) info.get("piece length");
+        int pieceSize = temp.intValue();
 
         if (!info.containsKey("pieces")) throw new RuntimeException("Error with pieces");
         byte[] pieceHashes = (byte[]) info.get("pieces");
