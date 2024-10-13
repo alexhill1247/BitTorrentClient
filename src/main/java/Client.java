@@ -16,13 +16,13 @@ public class Client {
     public Torrent torrent;
     public String id;
 
-    private Random random = new Random();
-
     public Client(int port, String torrentPath, String downloadPath) {
-        id = "";
+        Random random = new Random();
+        StringBuilder strBuilder = new StringBuilder();
         for (int i = 0; i < 20; i++) {
-            id += random.nextInt(10);
+            strBuilder.append(random.nextInt(10));
         }
+        id = strBuilder.toString();
 
         this.port = port;
 
@@ -38,10 +38,11 @@ public class Client {
     //----------------------------------
 
     private boolean isStopping;
-    private AtomicBoolean isProcessingPeers = new AtomicBoolean(false);
-    private AtomicBoolean isProcessingUploads = new AtomicBoolean(false);
-    private AtomicBoolean isProcessingDownloads = new AtomicBoolean(false);
+    private final AtomicBoolean isProcessingPeers = new AtomicBoolean(false);
+    private final AtomicBoolean isProcessingUploads = new AtomicBoolean(false);
+    private final AtomicBoolean isProcessingDownloads = new AtomicBoolean(false);
 
+    @SuppressWarnings("BusyWait")
     public void start() {
         System.out.println("Starting client");
 
@@ -181,7 +182,7 @@ public class Client {
 
             @Override
             public void failed(Throwable exc, Void attachment) {
-                exc.printStackTrace();
+                System.out.println("Failed to accept connection");
             }
         });
     }
@@ -295,7 +296,7 @@ public class Client {
     //             Uploads
     //-----------------------------------
 
-    private ConcurrentLinkedQueue<DataRequest> outgoingBlocks = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<DataRequest> outgoingBlocks = new ConcurrentLinkedQueue<>();
 
     private void handleBlockRequested(DataRequest block) {
         outgoingBlocks.add(block);
@@ -313,7 +314,7 @@ public class Client {
         processUploads();
     }
 
-    private Throttle uploadThrottle = new Throttle(
+    private final Throttle uploadThrottle = new Throttle(
             maxUploadBytesPerSec,
             Duration.ofSeconds(1)
     );
@@ -340,7 +341,7 @@ public class Client {
     //            Downloads
     //----------------------------------
 
-    private ConcurrentLinkedQueue<DataPackage> incomingBlocks = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<DataPackage> incomingBlocks = new ConcurrentLinkedQueue<>();
 
     private void handleBlockReceived(DataPackage args) {
         incomingBlocks.add(args);
@@ -356,7 +357,7 @@ public class Client {
         processDownloads();
     }
 
-    private Throttle downloadThrottle = new Throttle(
+    private final Throttle downloadThrottle = new Throttle(
             maxDownloadBytesPerSec,
             Duration.ofSeconds(1)
     );
@@ -417,7 +418,6 @@ public class Client {
         // Sort indices based on scores
         Integer[] indicesCopy = Arrays.stream(indices).boxed().toArray(Integer[]::new);
         Arrays.sort(indicesCopy, Comparator.comparingDouble(x -> scores[x]));
-        //TODO ensure this works properly
         Collections.reverse(Arrays.asList(indicesCopy));
         indices = Arrays.stream(indicesCopy).mapToInt(Integer::intValue).toArray();
 

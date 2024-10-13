@@ -7,7 +7,7 @@ public class Throttle {
     public long maxSize;
     public Duration maxWindow;
 
-    class Item {
+    static class Item {
         public Instant time;
         public long size;
 
@@ -18,7 +18,7 @@ public class Throttle {
     }
 
     private final Object lock = new Object();
-    private List<Item> items = new ArrayList<>();
+    private final List<Item> items = new ArrayList<>();
 
     public Throttle(int maxSize, Duration maxWindow) {
         this.maxSize = maxSize;

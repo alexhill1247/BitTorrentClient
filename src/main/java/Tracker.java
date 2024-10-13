@@ -87,6 +87,7 @@ public class Tracker {
             byteList.add(b);
         }
 
+        @SuppressWarnings("unchecked")
         HashMap<String, Object> info = (HashMap<String, Object>) BEncoding.decode(byteList);
 
         if (info == null) {

@@ -17,7 +17,7 @@ import java.util.stream.IntStream;
 public class Torrent {
     public String name;
     public Boolean isPrivate;
-    public List<FileItem> files = new ArrayList<>();
+    public List<FileItem> files;
     public String getFileDirectory() { return (files.size() > 1 ? name + File.separatorChar : ""); }
     public String downloadDirectory;
 
@@ -84,7 +84,7 @@ public class Torrent {
         return blockSize;
     }
 
-    public byte[] infoHash = new byte[20];
+    public byte[] infoHash;
 
     public String getUrlSafeInfoHash() {
         String infoHashStr = new String(infoHash, StandardCharsets.UTF_8);
@@ -97,8 +97,8 @@ public class Torrent {
         this.peerListUpdatedListener = listener;
     }
 
-    private Object[] fileWriteLocks;
-    private static MessageDigest sha1;
+    private final Object[] fileWriteLocks;
+    private static final MessageDigest sha1;
     static {
         try {
             sha1 = MessageDigest.getInstance("SHA-1");
@@ -108,7 +108,7 @@ public class Torrent {
     }
 
     public Torrent(String name, String downloadDirectory, List<FileItem> files, List<String> trackers,
-                   int pieceSize, byte[] pieceHashes, int blockSize, boolean isPrivate)
+                   int pieceSize, byte[] pieceHashes, int blockSize, Boolean isPrivate)
     {
         this.name = name;
         this.downloadDirectory = downloadDirectory;
@@ -181,10 +181,8 @@ public class Torrent {
         byte[] buffer = new byte[length];
 
         for (int i = 0; i < files.size(); i++) {
-            if ((start < files.get(i).offset &&
-                   end < files.get(i).offset) ||
-                (start > files.get(i).offset + files.get(i).size &&
-                   end > files.get(i).offset + files.get(i).size))
+            if ((start < files.get(i).offset && end < files.get(i).offset) ||
+                (start > files.get(i).offset + files.get(i).size && end > files.get(i).offset + files.get(i).size))
                 continue;
 
             String filePath = downloadDirectory + File.separatorChar + getFileDirectory() + files.get(i).path;
@@ -210,10 +208,8 @@ public class Torrent {
         long end = start + bytes.length;
 
         for (int i = 0; i < files.size(); i++) {
-            if ((start < files.get(i).offset &&
-                   end < files.get(i).offset) ||
-                (start > files.get(i).offset + files.get(i).size &&
-                   end > files.get(i).offset + files.get(i).size))
+            if ((start < files.get(i).offset && end < files.get(i).offset) ||
+                (start > files.get(i).offset + files.get(i).size && end > files.get(i).offset + files.get(i).size))
                 continue;
 
             String filePath = downloadDirectory + File.separatorChar + getFileDirectory() + files.get(i).path;
@@ -433,10 +429,9 @@ public class Torrent {
 
                 String path = String.join(File.separator, pathList
                         .stream()
-                        .map(x -> decodeUTF8Str(x))
+                        .map(Torrent::decodeUTF8Str)
                         .collect(Collectors.joining())
                 );
-                //TODO check output ^^^
 
                 long size = (long) dict.get("length");
 
@@ -478,19 +473,11 @@ public class Torrent {
         if (obj.containsKey("creation date"))
             torrent.creationDate = unixTimestampToZonedDateTime((long) obj.get("creation date"));
 
-        //TODO check output vvv
         if (obj.containsKey("encoding"))
             torrent.encoding = Charset.forName(decodeUTF8Str(obj.get("encoding")));
 
         return torrent;
     }
-
-    //----------------------------------------------------
-    //                      CREATION
-    //----------------------------------------------------
-
-    //TODO torrent creation
-
 
     public void updateTrackers(Tracker.TrackerEvent ev, String addr, int port) {
         for (Tracker tracker : trackers) {
@@ -504,5 +491,3 @@ public class Torrent {
         }
     }
 }
-
-//TODO add torrent constructor overloading to support default values

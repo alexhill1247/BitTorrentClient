@@ -1,5 +1,3 @@
-import java.nio.file.Path;
-
 public class FileItem {
     public String path;
     public long size;

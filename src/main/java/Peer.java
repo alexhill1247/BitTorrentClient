@@ -59,7 +59,7 @@ public class Peer {
 
     private AsynchronousSocketChannel client;
     private final int bufferSize = 256;
-    private ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
+    private final ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
     private ArrayList<Byte> data = new ArrayList<>();
 
     public Boolean[] isPieceDownloaded = new Boolean[0];
@@ -169,7 +169,7 @@ public class Peer {
                 client.close();
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("Client was never open");
         }
 
         if (disconnectedListener != null) {
@@ -187,7 +187,7 @@ public class Peer {
     }
 
     private void read() {
-        client.read(buffer, buffer, new CompletionHandler<Integer, ByteBuffer>() {
+        client.read(buffer, buffer, new CompletionHandler<>() {
             @Override
             public void completed(Integer result, ByteBuffer attachment) {
                 // Set buffer to read
@@ -275,9 +275,6 @@ public class Peer {
     //--------------------------------------------------------
 
     public static HandshakeResult decodeHandshake(byte[] bytes) {
-        byte[] hash = new byte[20];
-        String id = "";
-
         if (bytes.length != 68 || bytes[0] != 19) {
             System.out.println("Invalid handshake 1");
             return new HandshakeResult(false, null, null);
@@ -289,10 +286,10 @@ public class Peer {
             return new HandshakeResult(false, null, null);
         }
 
-        hash = Arrays.copyOfRange(bytes, 28, 48);
+        byte[] hash = Arrays.copyOfRange(bytes, 28, 48);
 
         temp = Arrays.copyOfRange(bytes, 48, 68);
-        id = new String(temp, StandardCharsets.UTF_8);
+        String id = new String(temp, StandardCharsets.UTF_8);
 
         return new HandshakeResult(true, hash, id);
     }
@@ -386,15 +383,15 @@ public class Peer {
         return buffer.getInt(5);
     }
 
-    public static boolean decodeBitfield(byte[] bytes, int pieces, boolean[] isPieceDownloaded) {
+    public static BitfieldResult decodeBitfield(byte[] bytes, int pieces) {
 
-        isPieceDownloaded = new boolean[pieces];
+        boolean[] isPieceDownloaded = new boolean[pieces];
 
         int expectedLength = (int) Math.ceil(pieces / 8.0) + 1;
         ByteBuffer buffer = ByteBuffer.wrap(bytes);
         if (bytes.length != expectedLength + 4 || buffer.getInt(0) != expectedLength) {
             System.out.println("Invalid bitfield, first byte not " + expectedLength);
-            return false;
+            return new BitfieldResult(false, null);
         }
 
         BitSet bitfield = BitSet.valueOf((Arrays.copyOfRange(bytes, 5, bytes.length)));
@@ -402,7 +399,7 @@ public class Peer {
             isPieceDownloaded[i] = bitfield.get(bitfield.length() - 1 - i);
         }
 
-        return true;
+        return new BitfieldResult(true, isPieceDownloaded);
     }
 
     public static byte[] encodeHave(int index) {
@@ -658,9 +655,9 @@ public class Peer {
             }
         }
         else if (type == MessageType.bitfield) {
-            boolean[] isPieceDownloaded = new boolean[0];
-            if (decodeBitfield(bytes, this.isPieceDownloaded.length, isPieceDownloaded)) {
-                handleBitfield(isPieceDownloaded);
+            BitfieldResult result = decodeBitfield(bytes, isPieceDownloaded.length);
+            if (result.success) {
+                handleBitfield(result.isPieceDownloaded);
                 return;
             }
         }
