@@ -112,7 +112,7 @@ public class Peer {
         this(torrent, localID);
         this.client = client;
         try {
-            System.out.println("remote address " + client.getRemoteAddress());
+            //System.out.println("remote address " + client.getRemoteAddress());
             inetSocketAddress = (InetSocketAddress) client.getRemoteAddress();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -142,7 +142,7 @@ public class Peer {
     public void connect() {
         try {
             client = AsynchronousSocketChannel.open();
-            System.out.println("attempting connection to " + inetSocketAddress);
+            //System.out.println("attempting connection to " + inetSocketAddress);
             client.connect(inetSocketAddress, null, new CompletionHandler<Void, Void>() {
                 @Override
                 public void completed(Void result, Void attachment) {
@@ -152,7 +152,7 @@ public class Peer {
                 }
                 @Override
                 public void failed(Throwable exc, Void attachment) {
-                    System.out.println("connection failed: " + exc.getMessage());
+                    //System.out.println("Connection to " + inetSocketAddress + " failed: " + exc.getMessage());
                     disconnect();
                 }
             });
@@ -166,7 +166,7 @@ public class Peer {
         ex.printStackTrace();
         if (!isDisconnected) {
             isDisconnected = true;
-            System.out.println(this + " disconnected, down " + downloaded + ", up " + uploaded);
+            System.out.println(this + " " + inetSocketAddress + " disconnected, down " + downloaded + ", up " + uploaded);
         }
 
         try {
@@ -174,7 +174,7 @@ public class Peer {
                 client.close();
             }
         } catch (Exception e) {
-            System.out.println("Client was never open");
+            System.out.println("Client wasn't open");
         }
 
         if (disconnectedListener != null) {
@@ -192,9 +192,11 @@ public class Peer {
     }
 
     private void read() {
+        System.out.println("attempting read");
         client.read(buffer, buffer, new CompletionHandler<>() {
             @Override
             public void completed(Integer result, ByteBuffer attachment) {
+                System.out.println("completed read");
                 // Set buffer to read
                 attachment.flip();
                 // Move bytes from buffer into array
@@ -225,6 +227,7 @@ public class Peer {
 
             @Override
             public void failed(Throwable exc, ByteBuffer attachment) {
+                System.out.println("failed to read: " + exc.toString());
                 disconnect();
             }
         });
@@ -301,17 +304,21 @@ public class Peer {
 
     public static byte[] encodeHandshake(byte[] hash, String id) {
         byte[] message = new byte[68];
-        message[0] = 19;
-        System.arraycopy("BitTorrent protocol".getBytes(StandardCharsets.UTF_8),
-                0, message,
-                1, 19);
-        System.arraycopy(hash,
-                0, message,
-                28, 20);
-        System.arraycopy(id.getBytes(StandardCharsets.UTF_8),
-                0, message,
-                48, 20);
 
+        message[0] = 19;
+
+        System.arraycopy("BitTorrent protocol".getBytes(StandardCharsets.UTF_8),
+                0, message, 1, 19);
+
+        for (int i = 20; i < 28; i++) message[i] = 0;
+
+        System.arraycopy(hash,
+                0, message, 28, 20);
+
+        System.arraycopy(id.getBytes(StandardCharsets.UTF_8),
+                0, message, 48, 20);
+
+        System.out.println("handshake: " + Arrays.toString(message));
         return message;
     }
 
@@ -531,7 +538,7 @@ public class Peer {
     private void sendHandshake() {
         if (isHandshakeSent) return;
 
-        System.out.println(this + "-> handshake");
+        System.out.println(this + " -> handshake");
         sendBytes(encodeHandshake(torrent.infoHash, localID));
         isHandshakeSent = true;
     }
@@ -539,7 +546,7 @@ public class Peer {
     public void sendKeepAlive() {
         if (lastKeepAlive.isAfter(Instant.now().minusSeconds(30))) return;
 
-        System.out.println(this + "-> keep alive");
+        System.out.println(this + " -> keep alive");
         sendBytes(encodeKeepAlive());
         lastKeepAlive = Instant.now();
     }
@@ -547,7 +554,7 @@ public class Peer {
     public void sendChoke() {
         if (isChokeSent) return;
 
-        System.out.println(this + "-> choke");
+        System.out.println(this + " -> choke");
         sendBytes(encodeChoke());
         isChokeSent = true;
     }
@@ -555,7 +562,7 @@ public class Peer {
     public void sendUnchoke() {
         if (!isChokeSent) return;
 
-        System.out.println(this + "-> unchoke");
+        System.out.println(this + " -> unchoke");
         sendBytes(encodeUnchoke());
         isChokeSent = false;
     }
@@ -563,7 +570,7 @@ public class Peer {
     public void sendInterested() {
         if (isInterestedSent) return;
 
-        System.out.println(this + "-> interested");
+        System.out.println(this + " -> interested");
         sendBytes(encodeInterested());
         isInterestedSent = true;
     }
@@ -571,18 +578,18 @@ public class Peer {
     public void sendNotInterested() {
         if (!isInterestedSent) return;
 
-        System.out.println(this + "-> not interested");
+        System.out.println(this + " -> not interested");
         sendBytes(encodeNotInterested());
         isInterestedSent = false;
     }
 
     public void sendHave(int index) {
-        System.out.println(this + "-> have " + index);
+        System.out.println(this + " -> have " + index);
         sendBytes(encodeHave(index));
     }
 
     public void sendBitfield(Boolean[] isPieceDownloaded) {
-        System.out.println(this + "-> bitfield" +
+        System.out.println(this + " -> bitfield" +
                 Arrays.stream(isPieceDownloaded)
                         .map(b -> b ? "1" : "0")
                         .collect(Collectors.joining())
@@ -596,7 +603,7 @@ public class Peer {
     }
 
     public void sendPiece(int index, int begin, byte[] data) {
-        System.out.println(this + "-> piece " + index + ", " + begin + ", " + data.length);
+        System.out.println(this + " -> piece " + index + ", " + begin + ", " + data.length);
         sendBytes(encodePiece(index, begin, data));
         uploaded += data.length;
     }
@@ -606,7 +613,7 @@ public class Peer {
     //--------------------------------------------------
 
     private MessageType getMessageType(byte[] bytes) {
-        if (isHandshakeReceived) return MessageType.handshake;
+        if (!isHandshakeReceived) return MessageType.handshake;
 
         ByteBuffer buffer = ByteBuffer.wrap(bytes);
         if (bytes.length == 4 && buffer.getInt(0) == 0) {
@@ -697,7 +704,7 @@ public class Peer {
     }
 
     private void handleHandshake(byte[] hash, String id) {
-        System.out.println(this + "<- handshake");
+        System.out.println(this + " <- handshake");
 
         if (!Arrays.equals(torrent.infoHash, hash)) {
             System.out.println("Invalid handshake, expected hash = " + bytesToHexString(torrent.infoHash) +
@@ -712,15 +719,15 @@ public class Peer {
     }
 
     private void handleKeepAlive() {
-        System.out.println(this + "<- keep alive");
+        System.out.println(this + " <- keep alive");
     }
 
     private void handlePort(int port) {
-        System.out.println(this + "<- port " + port);
+        System.out.println(this + " <- port " + port);
     }
 
     private void handleChoke() {
-        System.out.println(this + "<- choke");
+        System.out.println(this + " <- choke");
         isChokeReceived = true;
 
         if (stateChangedListener != null) {
@@ -729,7 +736,7 @@ public class Peer {
     }
 
     private void handleUnchoke() {
-        System.out.println(this + "<- unchoke");
+        System.out.println(this + " <- unchoke");
         isChokeReceived = false;
 
         if (stateChangedListener != null) {
@@ -738,7 +745,7 @@ public class Peer {
     }
 
     private void handleInterested() {
-        System.out.println(this + "<- interested");
+        System.out.println(this + " <- interested");
         isInterestedReceived = true;
 
         if (stateChangedListener != null) {
@@ -747,7 +754,7 @@ public class Peer {
     }
 
     private void handleNotInterested() {
-        System.out.println(this + "<- not interested");
+        System.out.println(this + " <- not interested");
         isInterestedReceived = false;
 
         if (stateChangedListener != null) {
@@ -757,7 +764,7 @@ public class Peer {
 
     private void handleHave(int index) {
         isPieceDownloaded[index] = true;
-        System.out.println(this + "<- have " + index + " - " + getPiecesDownloadedCount() +
+        System.out.println(this + " <- have " + index + " - " + getPiecesDownloadedCount() +
                 " available (" + getPiecesDownloaded() + ")"
         );
 
@@ -772,7 +779,7 @@ public class Peer {
             this.isPieceDownloaded[i] = this.isPieceDownloaded[i] || isPieceDownloaded[i];
         }
 
-        System.out.println(this + "<- bitfield " + getPiecesDownloadedCount() +
+        System.out.println(this + " <- bitfield " + getPiecesDownloadedCount() +
                 " available (" + getPiecesDownloaded() + ")"
         );
 
@@ -782,7 +789,7 @@ public class Peer {
     }
 
     private void handleRequest(int index, int begin, int length) {
-        System.out.println(this + "<- request " + index + ", " + begin + ", " + length);
+        System.out.println(this + " <- request " + index + ", " + begin + ", " + length);
 
         if (blockRequestedListener != null) {
             blockRequestedListener.onBlockRequested(new DataRequest(this, index, begin, length));
@@ -790,7 +797,7 @@ public class Peer {
     }
 
     private void handlePiece(int index, int begin, byte[] data) {
-        System.out.println(this + "<- piece " + index + ", " + begin + ", " + data.length);
+        System.out.println(this + " <- piece " + index + ", " + begin + ", " + data.length);
         downloaded += data.length;
 
         if (blockReceivedListener != null) {
@@ -799,7 +806,7 @@ public class Peer {
     }
 
     private void handleCancel(int index, int begin, int length) {
-        System.out.println(this + "<- cancel");
+        System.out.println(this + " <- cancel");
 
         if (blockCancelledListener != null) {
             blockCancelledListener.onBlockCancelled(new DataRequest(this, index, begin, length));

@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -361,7 +362,7 @@ public class Torrent {
                 HashMap<String, Object> fileDict = new HashMap<>();
                 // Store path as a list
                 fileDict.put("path", Arrays.stream(fileItem.path
-                        .split(String.valueOf(File.separatorChar)))
+                        .split(Pattern.quote(String.valueOf(File.separatorChar))))
                         .map(x -> x.getBytes(StandardCharsets.UTF_8))
                         .toList()
                 );
@@ -411,7 +412,7 @@ public class Torrent {
             long running = 0;
 
             for (Object item : (List<Object>) info.get("files")) {
-                HashMap<String, Object> dict = (HashMap<String, Object>) item;
+                TreeMap<String, Object> dict = (TreeMap<String, Object>) item;
 
                 if (dict == null || !dict.containsKey("path") || !dict.containsKey("length"))
                     throw new RuntimeException("Incorrect file specification");

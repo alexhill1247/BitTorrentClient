@@ -145,6 +145,7 @@ public class Client {
         InetAddress localIP;
         try {
             localIP = getLocalIPAddress();
+            //System.out.println("Local IP: " + localIP);
         } catch (UnknownHostException | SocketException e) {
             throw new RuntimeException(e);
         }
@@ -172,19 +173,23 @@ public class Client {
     }
 
     private void acceptConnections() {
-        System.out.println("looking for connection");
+        //System.out.println("looking for connection");
         serverSocketChannel.accept(null, new CompletionHandler<AsynchronousSocketChannel, Void>() {
 
             @Override
             public void completed(AsynchronousSocketChannel result, Void attachment) {
-                System.out.println("connection found");
+                try {
+                    System.out.println("Connection found: " + result.getRemoteAddress());
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
                 handleNewConnection(result);
                 serverSocketChannel.accept(null, this);
             }
 
             @Override
             public void failed(Throwable exc, Void attachment) {
-                System.out.println("Failed to accept connection");
+                System.out.println("Failed to accept connection: " + exc.getMessage());
             }
         });
     }

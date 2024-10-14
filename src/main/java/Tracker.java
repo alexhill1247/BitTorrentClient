@@ -1,16 +1,16 @@
-import java.net.InetSocketAddress;
-import java.net.URI;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.*;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 public class Tracker {
@@ -45,7 +45,22 @@ public class Tracker {
 
         lastPeerRequest = Instant.now();
 
-        String format = "%s?info_hash=%s&peer_id=%s&port=%d&uploaded=%d&downloaded=%d&left=%d&event=%s&compact=1";
+        /*
+        Get client external IP from web service.
+        Necessary for when the tracker is on the same network as the client, otherwise
+        tracker will add local IP to peer list.
+         */
+        URL checkIP;
+        String externalIP;
+        try {
+            checkIP = new URL("http://checkip.amazonaws.com");
+            BufferedReader in = new BufferedReader(new InputStreamReader(checkIP.openStream()));
+            externalIP = in.readLine();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        String format = "%s?info_hash=%s&peer_id=%s&port=%d&uploaded=%d&downloaded=%d&left=%d&event=%s&compact=1&ip=%s";
         String url = String.format(format,
                 address,
                 torrent.getUrlSafeInfoHash(),
@@ -54,9 +69,10 @@ public class Tracker {
                 torrent.uploaded,
                 torrent.downloaded(),
                 torrent.remaining(),
-                ev.name());
+                ev.name(),
+                externalIP);
 
-        //System.out.println("requesting...");
+        //System.out.println("requesting: " + url);
         request(url);
     }
 
@@ -111,7 +127,7 @@ public class Tracker {
         peerRequestInterval = Duration.ofSeconds((long) info.get("interval"));
         //System.out.println("interval: " + peerRequestInterval);
         byte[] peerInfo = (byte[]) info.get("peers");
-        //System.out.println("peer info: " + new String(peerInfo));
+        //System.out.println("peer info: " + new String(peerInfo, StandardCharsets.UTF_8));
 
         ArrayList<InetSocketAddress> peers = new ArrayList<>();
         for (int i = 0; i < peerInfo.length/6; i++) {
@@ -124,7 +140,7 @@ public class Tracker {
             buffer.order(ByteOrder.BIG_ENDIAN);
             int port = buffer.getChar(offset+4);
 
-            System.out.println("peer: " + address + ":" + port);
+            //System.out.println("peer: " + address + ":" + port);
             peers.add(new InetSocketAddress(address, port));
         }
 
