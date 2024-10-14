@@ -62,7 +62,7 @@ public class Peer {
     private final ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
     private ArrayList<Byte> data = new ArrayList<>();
 
-    public Boolean[] isPieceDownloaded = new Boolean[0];
+    public Boolean[] isPieceDownloaded;
     public String getPiecesDownloaded() {
         return Arrays.stream(isPieceDownloaded)
                 .map(x -> Integer.toString(x ? 1 : 0))
@@ -109,10 +109,10 @@ public class Peer {
     public long downloaded;
 
     public Peer(Torrent torrent, String localID, AsynchronousSocketChannel client) {
-        this.torrent = torrent;
-        this.localID = localID;
+        this(torrent, localID);
         this.client = client;
         try {
+            System.out.println("remote address " + client.getRemoteAddress());
             inetSocketAddress = (InetSocketAddress) client.getRemoteAddress();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -120,8 +120,8 @@ public class Peer {
     }
 
     public Peer(Torrent torrent, String localID, InetSocketAddress endPoint) {
-        this.torrent = torrent;
-        this.localID = localID;
+        this(torrent, localID);
+        //System.out.println("endpoint " + endPoint);
         inetSocketAddress = endPoint;
     }
 
@@ -132,6 +132,7 @@ public class Peer {
         lastActive = Instant.now();
         int pieceCount = torrent.getPieceCount();
         isPieceDownloaded = new Boolean[pieceCount];
+        Arrays.fill(isPieceDownloaded, false);
         isBlockRequested = new Boolean[pieceCount][];
         for (int i = 0; i < pieceCount; i++) {
             isBlockRequested[i] = new Boolean[torrent.getBlockCount(i)];
@@ -141,6 +142,7 @@ public class Peer {
     public void connect() {
         try {
             client = AsynchronousSocketChannel.open();
+            System.out.println("attempting connection to " + inetSocketAddress);
             client.connect(inetSocketAddress, null, new CompletionHandler<Void, Void>() {
                 @Override
                 public void completed(Void result, Void attachment) {
@@ -150,6 +152,7 @@ public class Peer {
                 }
                 @Override
                 public void failed(Throwable exc, Void attachment) {
+                    System.out.println("connection failed: " + exc.getMessage());
                     disconnect();
                 }
             });
@@ -159,6 +162,8 @@ public class Peer {
     }
 
     public void disconnect() {
+        Exception ex = new Exception();
+        ex.printStackTrace();
         if (!isDisconnected) {
             isDisconnected = true;
             System.out.println(this + " disconnected, down " + downloaded + ", up " + uploaded);

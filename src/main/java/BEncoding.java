@@ -149,7 +149,7 @@ public class BEncoding {
         else if (obj instanceof String) encodeString(buffer, (String)obj);
         else if (obj instanceof Long) encodeNum(buffer, (Long)obj);
         else if (obj instanceof List<?>) encodeList(buffer, (List<Object>) obj);
-        else if (obj instanceof HashMap<?,?>) encodeDict(buffer, (HashMap<String, Object>) obj);
+        else if (obj instanceof Map<?,?>) encodeDict(buffer, (Map<String, Object>) obj);
         else throw new Exception("Unable to encode type " + obj.getClass());
 
     }

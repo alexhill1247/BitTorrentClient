@@ -30,7 +30,7 @@ public class Client {
         torrent.setPieceVerifiedListener(this::handlePieceVerified);
         torrent.setPeerListUpdatedListener(this::handlePeerListUpdated);
 
-        System.out.println(torrent);
+        System.out.println("Torrent: " + torrent);
     }
 
     //----------------------------------
@@ -172,10 +172,12 @@ public class Client {
     }
 
     private void acceptConnections() {
+        System.out.println("looking for connection");
         serverSocketChannel.accept(null, new CompletionHandler<AsynchronousSocketChannel, Void>() {
 
             @Override
             public void completed(AsynchronousSocketChannel result, Void attachment) {
+                System.out.println("connection found");
                 handleNewConnection(result);
                 serverSocketChannel.accept(null, this);
             }

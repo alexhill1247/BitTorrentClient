@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public class Tracker {
@@ -40,6 +41,8 @@ public class Tracker {
             return;
         }
 
+        //System.out.println("updating...");
+
         lastPeerRequest = Instant.now();
 
         String format = "%s?info_hash=%s&peer_id=%s&port=%d&uploaded=%d&downloaded=%d&left=%d&event=%s&compact=1";
@@ -53,6 +56,7 @@ public class Tracker {
                 torrent.remaining(),
                 ev.name());
 
+        //System.out.println("requesting...");
         request(url);
     }
 
@@ -74,6 +78,7 @@ public class Tracker {
     }
 
     public void handleResponse(HttpResponse<byte[]> response) {
+        //System.out.println("received response to request");
         byte[] bytes;
 
         if (response.statusCode() != 200) {
@@ -82,13 +87,21 @@ public class Tracker {
         }
 
         bytes = response.body();
+        System.out.println("received bytes: " + bytes.length);
         List<Byte> byteList = new ArrayList<>();
         for (byte b : bytes) {
             byteList.add(b);
         }
+        //System.out.println("converted to list");
 
-        @SuppressWarnings("unchecked")
-        HashMap<String, Object> info = (HashMap<String, Object>) BEncoding.decode(byteList);
+        Map<String, Object> info = null;
+        try {
+            //noinspection unchecked
+            info = (Map<String, Object>) BEncoding.decode(byteList);
+            //System.out.println("decoded info: " + info);
+        } catch (Exception e) {
+            System.out.println("failed to decode byte list: " + e.getMessage());
+        }
 
         if (info == null) {
             System.out.println("Unable to decode tracker response");
@@ -96,19 +109,22 @@ public class Tracker {
         }
 
         peerRequestInterval = Duration.ofSeconds((long) info.get("interval"));
+        //System.out.println("interval: " + peerRequestInterval);
         byte[] peerInfo = (byte[]) info.get("peers");
+        //System.out.println("peer info: " + new String(peerInfo));
 
         ArrayList<InetSocketAddress> peers = new ArrayList<>();
         for (int i = 0; i < peerInfo.length/6; i++) {
             int offset = i * 6;
-            String address = peerInfo[offset] + "."
-                    + peerInfo[offset+1] + "."
-                    + peerInfo[offset+2] + "."
-                    + peerInfo[offset+3];
+            String address = (peerInfo[offset]   & 0xFF) + "."
+                           + (peerInfo[offset+1] & 0xFF) + "."
+                           + (peerInfo[offset+2] & 0xFF) + "."
+                           + (peerInfo[offset+3] & 0xFF);
             ByteBuffer buffer = ByteBuffer.wrap(peerInfo);
             buffer.order(ByteOrder.BIG_ENDIAN);
             int port = buffer.getChar(offset+4);
 
+            System.out.println("peer: " + address + ":" + port);
             peers.add(new InetSocketAddress(address, port));
         }
 

@@ -380,17 +380,7 @@ public class Torrent {
         return dict;
     }
 
-    //FIXME does not decode properly
-    public static String decodeUTF8Str(Object obj) {
-        byte[] bytes;
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        try (ObjectOutputStream out = new ObjectOutputStream(bos)) {
-            out.writeObject(obj);
-            out.flush();
-            bytes = bos.toByteArray();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    public static String decodeUTF8Str(byte[] bytes) {
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
@@ -405,7 +395,7 @@ public class Torrent {
         if (obj == null) throw new RuntimeException("Not a torrent file");
 
         List<String> trackers = new ArrayList<>();
-        if (obj.containsKey("announce")) trackers.add(decodeUTF8Str(obj.get("announce")));
+        if (obj.containsKey("announce")) trackers.add(decodeUTF8Str((byte[]) obj.get("announce")));
 
         if (!obj.containsKey("info")) throw new RuntimeException("Missing torrent info");
         TreeMap<String, Object> info = (TreeMap<String, Object>) obj.get("info");
@@ -430,7 +420,7 @@ public class Torrent {
 
                 String path = String.join(File.separator, pathList
                         .stream()
-                        .map(Torrent::decodeUTF8Str)
+                        .map(x -> decodeUTF8Str((byte[]) x))
                         .collect(Collectors.joining())
                 );
 
@@ -467,23 +457,24 @@ public class Torrent {
         );
 
         if (obj.containsKey("comment"))
-            torrent.comment = decodeUTF8Str(obj.get("comment"));
+            torrent.comment = decodeUTF8Str((byte[]) obj.get("comment"));
 
         if (obj.containsKey("created by"))
-            torrent.createdBy = decodeUTF8Str(obj.get("created by"));
+            torrent.createdBy = decodeUTF8Str((byte[]) obj.get("created by"));
 
         if (obj.containsKey("creation date"))
             torrent.creationDate = unixTimestampToZonedDateTime((long) obj.get("creation date"));
 
         if (obj.containsKey("encoding"))
-            torrent.encoding = Charset.forName(decodeUTF8Str(obj.get("encoding")));
+            torrent.encoding = Charset.forName(decodeUTF8Str((byte[]) obj.get("encoding")));
 
         return torrent;
     }
 
-    public void updateTrackers(Tracker.TrackerEvent ev, String addr, int port) {
+    public void updateTrackers(Tracker.TrackerEvent ev, String id, int port) {
         for (Tracker tracker : trackers) {
-            tracker.update(this, ev, addr, port);
+            System.out.println("updating tracker: " + tracker.address);
+            tracker.update(this, ev, id, port);
         }
     }
 
