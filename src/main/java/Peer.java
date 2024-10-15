@@ -145,7 +145,7 @@ public class Peer {
             try {
                 client = AsynchronousSocketChannel.open();
                 System.out.println("attempting connection to " + inetSocketAddress);
-                System.out.println("reachable: " + inetSocketAddress.getAddress().isReachable(2000));
+                //System.out.println("reachable: " + inetSocketAddress.getAddress().isReachable(2000));
                 client.connect(inetSocketAddress, null, new CompletionHandler<Void, Void>() {
                     @Override
                     public void completed(Void result, Void attachment) {
@@ -202,12 +202,12 @@ public class Peer {
 
                 @Override
                 public void completed(Integer result, Void attachment) {
-                    System.out.println("bytes sent");
+                    //System.out.println("bytes sent");
                 }
 
                 @Override
                 public void failed(Throwable exc, Void attachment) {
-                    System.out.println("bytes not sent");
+                    System.out.println("Failed to send bytes");
                 }
             });
         } catch (Exception e) {
@@ -423,14 +423,14 @@ public class Peer {
 
     public static BitfieldResult decodeBitfield(byte[] bytes, int pieces) {
 
-        System.out.println("bytes: " + bytes.length + ", " + Arrays.toString(bytes));
-        System.out.println("pieces: " + pieces);
+        //System.out.println("bytes: " + bytes.length + ", " + Arrays.toString(bytes));
+        //System.out.println("pieces: " + pieces);
 
         boolean[] isPieceDownloaded = new boolean[pieces];
 
         int expectedLength = ((int) Math.ceil(pieces / 8.0)) + 1;
 
-        System.out.println("expectedLength: " + expectedLength);
+        //System.out.println("expectedLength: " + expectedLength);
 
         ByteBuffer buffer = ByteBuffer.wrap(bytes);
 
@@ -440,7 +440,7 @@ public class Peer {
         }
 
         byte[] bitfieldBytes = Arrays.copyOfRange(bytes, 5, bytes.length);
-        System.out.println("bf bytes: " + bitfieldBytes.length + ", " + Arrays.toString(bitfieldBytes));
+        //System.out.println("bf bytes: " + bitfieldBytes.length + ", " + Arrays.toString(bitfieldBytes));
 
         StringBuilder bitsString = new StringBuilder();
         for (byte b : bitfieldBytes) {
@@ -634,7 +634,7 @@ public class Peer {
     }
 
     public void sendBitfield(Boolean[] isPieceDownloaded) {
-        System.out.println(this + " -> bitfield" +
+        System.out.println(this + " -> bitfield " +
                 Arrays.stream(isPieceDownloaded)
                         .map(b -> b ? "1" : "0")
                         .collect(Collectors.joining())
@@ -674,7 +674,7 @@ public class Peer {
         lastActive = Instant.now();
 
         MessageType type = getMessageType(bytes);
-        System.out.println(type.toString());
+        //System.out.println("Message received, type: " + type.toString());
 
         if (type == MessageType.unknown) return;
 

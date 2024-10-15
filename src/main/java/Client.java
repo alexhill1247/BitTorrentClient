@@ -155,12 +155,12 @@ public class Client {
         for (var endPoint : endPoints) {
             if (endPoint.getAddress() == localIP && endPoint.getPort() == port) continue;
 
-            System.out.println(endPoint);
+            //System.out.println(endPoint);
             addPeer(new Peer(torrent, id, endPoint));
         }
 
-        System.out.println("Received peer info from " + sender);
-        System.out.println("Peer count: " + peers.size());
+        //System.out.println("Received peer info from " + sender);
+        //System.out.println("Peer count: " + peers.size());
     }
 
     private AsynchronousServerSocketChannel serverSocketChannel;
