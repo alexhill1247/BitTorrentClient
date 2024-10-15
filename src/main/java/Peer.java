@@ -140,30 +140,43 @@ public class Peer {
     }
 
     public void connect() {
-        try {
-            client = AsynchronousSocketChannel.open();
-            //System.out.println("attempting connection to " + inetSocketAddress);
-            client.connect(inetSocketAddress, null, new CompletionHandler<Void, Void>() {
-                @Override
-                public void completed(Void result, Void attachment) {
-                    read();
-                    sendHandshake();
-                    if (isHandshakeReceived) sendBitfield(torrent.isPieceVerified);
-                }
-                @Override
-                public void failed(Throwable exc, Void attachment) {
-                    //System.out.println("Connection to " + inetSocketAddress + " failed: " + exc.getMessage());
-                    disconnect();
-                }
-            });
-        } catch (Exception e) {
-            disconnect();
+        // New connection, connect us -> them
+        if (client == null) {
+            try {
+                client = AsynchronousSocketChannel.open();
+                System.out.println("attempting connection to " + inetSocketAddress);
+                System.out.println("reachable: " + inetSocketAddress.getAddress().isReachable(2000));
+                client.connect(inetSocketAddress, null, new CompletionHandler<Void, Void>() {
+                    @Override
+                    public void completed(Void result, Void attachment) {
+                        handleConnection();
+                    }
+                    @Override
+                    public void failed(Throwable exc, Void attachment) {
+                        System.out.println("Connection to " + inetSocketAddress + " failed: " + exc.getMessage());
+                        exc.printStackTrace();
+                        disconnect();
+                    }
+                });
+            } catch (Exception e) {
+                disconnect();
+            }
         }
+        // Connection already established: them -> us
+        else {
+            handleConnection();
+        }
+    }
+
+    private void handleConnection() {
+        read();
+        sendHandshake();
+        if (isHandshakeReceived) sendBitfield(torrent.isPieceVerified);
     }
 
     public void disconnect() {
         Exception ex = new Exception();
-        ex.printStackTrace();
+        //ex.printStackTrace();
         if (!isDisconnected) {
             isDisconnected = true;
             System.out.println(this + " " + inetSocketAddress + " disconnected, down " + downloaded + ", up " + uploaded);
@@ -185,24 +198,35 @@ public class Peer {
     private void sendBytes(byte[] bytes) {
         ByteBuffer buffer = ByteBuffer.wrap(bytes);
         try {
-            client.write(buffer);
+            client.write(buffer, null, new CompletionHandler<Integer, Void>() {
+
+                @Override
+                public void completed(Integer result, Void attachment) {
+                    System.out.println("bytes sent");
+                }
+
+                @Override
+                public void failed(Throwable exc, Void attachment) {
+                    System.out.println("bytes not sent");
+                }
+            });
         } catch (Exception e) {
             disconnect();
         }
     }
 
     private void read() {
-        System.out.println("attempting read");
+        //System.out.println("attempting read");
         client.read(buffer, buffer, new CompletionHandler<>() {
+
             @Override
             public void completed(Integer result, ByteBuffer attachment) {
-                System.out.println("completed read");
-                // Set buffer to read
+                //System.out.println("completed read");
+
+                // Get data from buffer
                 attachment.flip();
-                // Move bytes from buffer into array
                 byte[] bytes = new byte[attachment.limit()];
                 attachment.get(bytes);
-                // Put into data list
                 for (byte b : bytes) {
                     data.add(b);
                 }
@@ -219,9 +243,11 @@ public class Peer {
                     }
                     handleMessage(subBytes);
 
-                    data = (ArrayList<Byte>) data.subList(messageLength, data.size());
+                    subList = data.subList(messageLength, data.size());
+                    data = new ArrayList<>(subList);
                     messageLength = getMessageLength(data);
                 }
+
                 read();
             }
 
@@ -318,7 +344,7 @@ public class Peer {
         System.arraycopy(id.getBytes(StandardCharsets.UTF_8),
                 0, message, 48, 20);
 
-        System.out.println("handshake: " + Arrays.toString(message));
+        //System.out.println("handshake: " + new String(message, StandardCharsets.UTF_8));
         return message;
     }
 
@@ -397,18 +423,37 @@ public class Peer {
 
     public static BitfieldResult decodeBitfield(byte[] bytes, int pieces) {
 
+        System.out.println("bytes: " + bytes.length + ", " + Arrays.toString(bytes));
+        System.out.println("pieces: " + pieces);
+
         boolean[] isPieceDownloaded = new boolean[pieces];
 
-        int expectedLength = (int) Math.ceil(pieces / 8.0) + 1;
+        int expectedLength = ((int) Math.ceil(pieces / 8.0)) + 1;
+
+        System.out.println("expectedLength: " + expectedLength);
+
         ByteBuffer buffer = ByteBuffer.wrap(bytes);
+
         if (bytes.length != expectedLength + 4 || buffer.getInt(0) != expectedLength) {
             System.out.println("Invalid bitfield, first byte not " + expectedLength);
             return new BitfieldResult(false, null);
         }
 
-        BitSet bitfield = BitSet.valueOf((Arrays.copyOfRange(bytes, 5, bytes.length)));
+        byte[] bitfieldBytes = Arrays.copyOfRange(bytes, 5, bytes.length);
+        System.out.println("bf bytes: " + bitfieldBytes.length + ", " + Arrays.toString(bitfieldBytes));
+
+        StringBuilder bitsString = new StringBuilder();
+        for (byte b : bitfieldBytes) {
+            // format byte as 8 bits, ex -56 (200 unsigned) -> 11001000
+            String bits = String.format("%8s", Integer.toBinaryString(b & 0xFF)).replace(" ", "0");
+            //System.out.println(bits);
+            bitsString.append(bits);
+        }
+        //System.out.println(bitsString);
+
+        String bits = bitsString.toString();
         for (int i = 0; i < pieces; i++) {
-            isPieceDownloaded[i] = bitfield.get(bitfield.length() - 1 - i);
+            isPieceDownloaded[i] = bits.charAt(i) == '1';
         }
 
         return new BitfieldResult(true, isPieceDownloaded);
@@ -629,6 +674,7 @@ public class Peer {
         lastActive = Instant.now();
 
         MessageType type = getMessageType(bytes);
+        System.out.println(type.toString());
 
         if (type == MessageType.unknown) return;
 

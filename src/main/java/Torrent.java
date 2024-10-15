@@ -88,8 +88,18 @@ public class Torrent {
     public byte[] infoHash;
 
     public String getUrlSafeInfoHash() {
-        String infoHashStr = new String(infoHash, StandardCharsets.UTF_8);
-        return URLEncoder.encode(infoHashStr, StandardCharsets.UTF_8);
+        StringBuilder sb = new StringBuilder();
+        Pattern pattern = Pattern.compile("[0-9a-zA-Z.\\-_~]");
+        for (int i = 0; i < infoHash.length; i++) {
+            char ch = (char) infoHash[i];
+            if (pattern.matcher(String.valueOf(ch)).find()) {
+                sb.append(ch);
+            } else {
+                sb.append("%");
+                sb.append(String.format("%02x", infoHash[i]));
+            }
+        }
+        return sb.toString();
     }
 
     private EventListeners.PeerListUpdatedListener peerListUpdatedListener;
@@ -474,7 +484,7 @@ public class Torrent {
 
     public void updateTrackers(Tracker.TrackerEvent ev, String id, int port) {
         for (Tracker tracker : trackers) {
-            System.out.println("updating tracker: " + tracker.address);
+            //System.out.println("updating tracker: " + tracker.address);
             tracker.update(this, ev, id, port);
         }
     }

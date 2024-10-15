@@ -3,6 +3,7 @@ import java.net.*;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
+import java.sql.SQLOutput;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -19,7 +20,8 @@ public class Client {
     public Client(int port, String torrentPath, String downloadPath) {
         Random random = new Random();
         StringBuilder strBuilder = new StringBuilder();
-        for (int i = 0; i < 20; i++) {
+        strBuilder.append("BP");
+        for (int i = 0; i < 18; i++) {
             strBuilder.append(random.nextInt(10));
         }
         id = strBuilder.toString();
@@ -153,6 +155,7 @@ public class Client {
         for (var endPoint : endPoints) {
             if (endPoint.getAddress() == localIP && endPoint.getPort() == port) continue;
 
+            System.out.println(endPoint);
             addPeer(new Peer(torrent, id, endPoint));
         }
 
@@ -178,12 +181,15 @@ public class Client {
 
             @Override
             public void completed(AsynchronousSocketChannel result, Void attachment) {
+                if (serverSocketChannel == null) return;
+
                 try {
-                    System.out.println("Connection found: " + result.getRemoteAddress());
+                    System.out.println("Accepted connection from: " + result.getRemoteAddress());
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
-                handleNewConnection(result);
+                addPeer(new Peer(torrent, id, result));
+
                 serverSocketChannel.accept(null, this);
             }
 
@@ -192,10 +198,6 @@ public class Client {
                 System.out.println("Failed to accept connection: " + exc.getMessage());
             }
         });
-    }
-
-    private void handleNewConnection(AsynchronousSocketChannel clientSocketChannel) {
-        addPeer(new Peer(torrent, id, clientSocketChannel));
     }
 
     private void disablePeerConnections() {

@@ -72,7 +72,10 @@ public class Tracker {
                 ev.name(),
                 externalIP);
 
-        //System.out.println("requesting: " + url);
+        //System.out.println("infohash: " + torrent.infoHash.length + ", " + Arrays.toString(torrent.infoHash));
+        //System.out.println("urlsafeinfohash: " + torrent.getUrlSafeInfoHash().length() + ", " + torrent.getUrlSafeInfoHash());
+
+        System.out.println("requesting: " + url);
         request(url);
     }
 
